@@ -1,0 +1,35 @@
+{
+  "name": "stock-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for stock information via Yahoo Finance + Investing.com, backed by MySQL",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "stock-mcp": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "server": "node dist/cli.js server",
+    "dev": "tsx src/cli.ts server",
+    "db:init": "tsx src/cli.ts db:init",
+    "sync": "tsx src/cli.ts sync",
+    "smoke": "tsx scripts/smoke.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build:sidecar": "cd cmd/gqlproxy && go build -o ../../bin/gqlproxy .",
+    "build:all": "npm run build && npm run build:sidecar"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "dotenv": "^16.4.5",
+    "mysql2": "^3.11.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
