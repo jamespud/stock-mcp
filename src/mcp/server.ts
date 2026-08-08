@@ -196,6 +196,15 @@ server.tool(
 
 export async function startMcpServer(): Promise<void> {
   const transport = new StdioServerTransport();
+  // Exit when the client closes stdin. The SDK's stdio transport does not 
+  // wire stdin 'end'/'close' to onclose, so the open MySQL pool would
+  // otherwise keep the process alive and Close() would hang.
+  const shutdown = async () => {
+    await closeDb();
+    process.exit(0);
+  };
+  process.stdin.on("end", shutdown);
+  process.stdin.on("close", shutdown);
   await server.connect(transport);
   process.on("SIGINT", async () => {
     await closeDb();
