@@ -20,7 +20,12 @@ export function getPool(): mysql.Pool {
 }
 
 export async function query<T = any>(sql: string, params: any[] = []): Promise<T> {
-  const [rows] = await getPool().execute(sql, params);
+  // Use the text protocol (query) instead of prepared statements (execute):
+  // mysql2 sends JS numbers as DOUBLE in the binary protocol, which MySQL
+  // 8.0.22+ rejects for LIMIT/OFFSET parameters ("Incorrect arguments to
+  // mysqld_stmt_execute"). The text protocol formats values inline and avoids
+  // this entire class of driver-level errors.
+  const [rows] = await getPool().query(sql, params);
   return rows as T;
 }
 

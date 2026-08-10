@@ -88,10 +88,6 @@ export async function getBars(symbol: string, interval: "1d" | "1wk" | "1mo", fr
 export async function getProfile(symbol: string) {
   const inst = await getInstrument(symbol);
   if (!inst) return null;
-  const execs = await query<any[]>(
-    `SELECT DISTINCT holder owner FROM holders WHERE instrument_id = ? AND 1 = 0`, [inst.id]
-  );
-  void execs;
   return {
     symbol: inst.symbol,
     name: inst.name,
@@ -224,8 +220,9 @@ export async function searchSymbols(q: string, limit = 20) {
   const like = `%${q}%`;
   return rows(
     await query<any[]>(
-      "SELECT id, symbol, name, exchange, currency FROM instruments WHERE symbol LIKE ? OR name LIKE ? ORDER BY symbol LIMIT ?",
-      [like, like, Math.max(1, Math.min(limit, 100))]
+      `SELECT id, symbol, name, exchange, currency FROM instruments
+       WHERE symbol LIKE ? OR name LIKE ? ORDER BY symbol LIMIT ${Math.max(1, Math.min(limit, 100))}`,
+      [like, like]
     )
   );
 }
