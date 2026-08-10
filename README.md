@@ -31,6 +31,17 @@ npm run sync -- --all --full
 npm run server
 ```
 
+## 测试
+
+```bash
+# 需要本地 MySQL（默认 127.0.0.1:3306，见 deploy/docker-compose.mysql.yml）且已初始化表结构
+npm run test:db    # 查询层：覆盖全部查询函数、LIMIT 绑定回归、边界参数
+npm run test:mcp   # 协议层：initialize/tools/list/tools/call 全工具端到端 + stdin 关闭退出
+npm test           # 两者一起
+```
+
+测试使用独立的 `ZZTEST` 标的，跑完自动清理，不会动已有数据。
+
 ## MCP 工具
 
 | 工具 | 说明 |

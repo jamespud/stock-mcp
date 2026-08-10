@@ -14,6 +14,9 @@
     "db:init": "tsx src/cli.ts db:init",
     "sync": "tsx src/cli.ts sync",
     "smoke": "tsx scripts/smoke.ts",
+    "test:db": "tsx scripts/test-db.ts",
+    "test:mcp": "tsx scripts/test-mcp.ts",
+    "test": "npm run test:db && npm run test:mcp",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build:sidecar": "cd cmd/gqlproxy && go build -o ../../bin/gqlproxy .",
     "build:all": "npm run build && npm run build:sidecar"
