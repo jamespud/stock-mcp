@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { syncOne } from "../services/sync.service.js";
+import { fetchYahooOptionChain } from "../providers/yahoo.js";
 import * as q from "../services/query.service.js";
 import { closeDb } from "../db.js";
 
@@ -177,6 +178,32 @@ server.tool(
       const r = await q.getOptions(symbol, expiration);
       if (!r) throw new Error(`instrument not found in DB: ${symbol}`);
       return r;
+    })
+);
+
+server.tool(
+  "get_option_quote",
+  "Fetch live options quotes for a stock directly from Yahoo (on-demand, no DB sync needed): underlying quote, available expirations/strikes, and per-contract bid/ask/last/volume/open interest/IV.",
+  {
+    symbol: z.string().describe("Ticker, e.g. NVDA"),
+    expiration: z.string().optional().describe("Expiration date YYYY-MM-DD (default: nearest listed)"),
+    type: z.enum(["CALL", "PUT"]).optional().describe("Only return CALL or PUT legs"),
+    strike: z.number().optional().describe("Only return legs at this exact strike"),
+    limit: z.number().int().min(1).max(2000).optional().default(500).describe("Max legs to return"),
+  },
+  async ({ symbol, expiration, type, strike, limit }) =>
+    guard(async () => {
+      let dateUnix: number | undefined;
+      if (expiration) {
+        dateUnix = Math.floor(new Date(expiration + "T00:00:00Z").getTime() / 1000);
+        if (Number.isNaN(dateUnix)) throw new Error(`invalid expiration date: ${expiration}`);
+      }
+      const chain = await fetchYahooOptionChain(symbol, dateUnix);
+      let legs = chain.legs;
+      if (type) legs = legs.filter((l) => l.optionType === type);
+      if (strike != null) legs = legs.filter((l) => l.strike === strike);
+      legs = legs.slice(0, limit);
+      return { ...chain, legs };
     })
 );
 

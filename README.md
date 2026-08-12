@@ -58,7 +58,8 @@ npm test           # 两者一起
 | `get_earnings` | 盈利历史与预测 |
 | `get_holders` | 机构持有人 |
 | `get_news` | 新闻 |
-| `get_options` | 期权链快照 |
+| `get_options` | 期权链快照（同步入库后查询） |
+| `get_option_quote` | 实时拉取期权行情（Yahoo 直连、按需、不依赖本地库）：标的报价 + 可选到期日/行权价/方向过滤 |
 
 ## 数据源
 
@@ -82,6 +83,7 @@ npm test           # 两者一起
 
 - 全量同步：从 `BARS_START_DATE`（默认 2000-01-01）拉全部日 K + 全部基本面 + 期权快照 + 新闻。
 - 增量同步：按 `sync_state.last_bar_date` 只拉新 K 线，并刷新行情、比率、预测、新闻、期权快照。
+- 期权行情：`get_options` 读取同步入库的快照；`get_option_quote` 每次直接从 Yahoo 按需拉取最新报价（含标的现价、可选到期日、行权价、方向过滤），无需先执行同步。
 - 所有写入均为幂等 upsert（`INSERT ... ON DUPLICATE KEY UPDATE`），可重复执行。
 - 限流已内置（默认 300ms/请求），Yahoo crumb 缓存 25 分钟，TVC token 缓存 25 分钟。
 

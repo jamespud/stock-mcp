@@ -1,5 +1,5 @@
 import { httpJson, httpText, HttpError } from "./http.js";
-import type { Bar, Dividend, FinancialField, NewsItem, OptionLeg, RatioValue } from "./types.js";
+import type { Bar, Dividend, FinancialField, NewsItem, OptionChain, OptionQuote, RatioValue } from "./types.js";
 
 const CHART_HOST = "https://query1.finance.yahoo.com";
 const COOKIE_URL = "https://fc.yahoo.com/";
@@ -147,36 +147,80 @@ export async function fetchYahooSummary(symbol: string): Promise<YahooSummary> {
 
 // ── options ─────────────────────────────────────────────────────
 
-export async function fetchYahooOptions(symbol: string, dateUnix?: number): Promise<OptionLeg[]> {
+async function fetchYahooOptionChainRaw(symbol: string, dateUnix?: number): Promise<any> {
   const c = await auth();
   let url = `${CHART_HOST}/v7/finance/options/${encodeURIComponent(symbol)}?crumb=${encodeURIComponent(c.crumb)}&formatted=false&lang=en-US&region=US`;
   if (dateUnix) url += `&date=${dateUnix}`;
   const resp = await authedGet<any>(url);
+  if (resp.optionChain?.error) {
+    throw new Error(`yahoo options: ${JSON.stringify(resp.optionChain.error)}`);
+  }
   const r = resp.optionChain?.result?.[0];
   if (!r) throw new Error(`yahoo options: no result for ${symbol}`);
-  const legs: OptionLeg[] = [];
+  return r;
+}
+
+function toDateStr(unix: number): string {
+  return new Date(unix * 1000).toISOString().slice(0, 10);
+}
+
+function parseOptionQuote(l: any, expiration: string, optionType: "CALL" | "PUT"): OptionQuote {
+  return {
+    contractSymbol: l.contractSymbol,
+    expiration,
+    optionType,
+    strike: l.strike,
+    lastPrice: l.lastPrice ?? null,
+    change: l.change ?? null,
+    percentChange: l.percentChange ?? null,
+    bid: l.bid ?? null,
+    ask: l.ask ?? null,
+    bidSize: l.bidSize ?? null,
+    askSize: l.askSize ?? null,
+    volume: l.volume ?? null,
+    openInterest: l.openInterest ?? null,
+    impliedVol: l.impliedVolatility ?? null,
+    inTheMoney: l.inTheMoney ?? null,
+    lastTradeDate: l.lastTradeDate ? new Date(l.lastTradeDate * 1000).toISOString() : null,
+    currency: l.currency ?? null,
+  };
+}
+
+export async function fetchYahooOptions(symbol: string, dateUnix?: number): Promise<OptionQuote[]> {
+  const r = await fetchYahooOptionChainRaw(symbol, dateUnix);
+  const legs: OptionQuote[] = [];
   for (const g of r.options ?? []) {
-    const expiration = new Date(g.expirationDate * 1000).toISOString().slice(0, 10);
-    for (const l of g.calls ?? []) {
-      legs.push({
-        contractSymbol: l.contractSymbol, expiration, optionType: "CALL", strike: l.strike,
-        lastPrice: l.lastPrice ?? null, bid: l.bid ?? null, ask: l.ask ?? null,
-        volume: l.volume ?? null, openInterest: l.openInterest ?? null,
-        impliedVol: l.impliedVolatility ?? null, inTheMoney: l.inTheMoney ?? null,
-        currency: l.currency ?? null,
-      });
-    }
-    for (const l of g.puts ?? []) {
-      legs.push({
-        contractSymbol: l.contractSymbol, expiration, optionType: "PUT", strike: l.strike,
-        lastPrice: l.lastPrice ?? null, bid: l.bid ?? null, ask: l.ask ?? null,
-        volume: l.volume ?? null, openInterest: l.openInterest ?? null,
-        impliedVol: l.impliedVolatility ?? null, inTheMoney: l.inTheMoney ?? null,
-        currency: l.currency ?? null,
-      });
-    }
+    const expiration = toDateStr(g.expirationDate);
+    for (const l of g.calls ?? []) legs.push(parseOptionQuote(l, expiration, "CALL"));
+    for (const l of g.puts ?? []) legs.push(parseOptionQuote(l, expiration, "PUT"));
   }
   return legs;
+}
+
+/** Live options chain from Yahoo (on-demand, no DB): underlying quote, expirations, strikes and per-contract quotes. */
+export async function fetchYahooOptionChain(symbol: string, dateUnix?: number): Promise<OptionChain> {
+  const r = await fetchYahooOptionChainRaw(symbol, dateUnix);
+  const q = r.quote ?? {};
+  const legs: OptionQuote[] = [];
+  for (const g of r.options ?? []) {
+    const expiration = toDateStr(g.expirationDate);
+    for (const l of g.calls ?? []) legs.push(parseOptionQuote(l, expiration, "CALL"));
+    for (const l of g.puts ?? []) legs.push(parseOptionQuote(l, expiration, "PUT"));
+  }
+  return {
+    symbol: r.underlyingSymbol ?? symbol,
+    asOf: new Date().toISOString(),
+    underlying: {
+      price: q.regularMarketPrice ?? null,
+      change: q.regularMarketChange ?? null,
+      changePercent: q.regularMarketChangePercent ?? null,
+      currency: q.currency ?? null,
+      marketState: q.marketState ?? null,
+    },
+    expirations: (r.expirationDates ?? []).map((d: number) => toDateStr(d)),
+    strikes: r.strikes ?? [],
+    legs,
+  };
 }
 
 // ── news / search ───────────────────────────────────────────────

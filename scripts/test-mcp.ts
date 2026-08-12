@@ -24,6 +24,7 @@ const TOOLS = [
   "get_holders",
   "get_news",
   "get_options",
+  "get_option_quote",
   "sync_stock",
 ];
 

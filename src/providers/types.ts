@@ -94,6 +94,29 @@ export interface OptionLeg {
   currency: string | null;
 }
 
+export interface OptionQuote extends OptionLeg {
+  change: number | null;
+  percentChange: number | null;
+  bidSize: number | null;
+  askSize: number | null;
+  lastTradeDate: string | null;
+}
+
+export interface OptionChain {
+  symbol: string;
+  asOf: string;
+  underlying: {
+    price: number | null;
+    change: number | null;
+    changePercent: number | null;
+    currency: string | null;
+    marketState: string | null;
+  };
+  expirations: string[];
+  strikes: number[];
+  legs: OptionQuote[];
+}
+
 export interface NewsItem {
   id: string;
   symbols: string | null;

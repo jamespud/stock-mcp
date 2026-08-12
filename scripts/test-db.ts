@@ -63,6 +63,7 @@ async function main() {
     const opts = await q.getOptions(TEST_SYMBOL);
     assert.equal(opts?.expirations.length, 1);
     assert.equal(opts?.legs.length, 2);
+    assert.ok(opts?.legs[0]?.contract_symbol, "options legs should include contract_symbol");
     assert.equal((await q.getOptions(TEST_SYMBOL, "2026-09-19"))?.legs.length, 2);
     assert.equal(await q.getOptions("QQQQNOPE"), null);
     assert.equal(await q.getNews("QQQQNOPE"), null);
