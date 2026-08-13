@@ -201,7 +201,7 @@ export async function getOptions(symbol: string, expiration?: string) {
   let extra = "";
   if (expiration) { extra = "AND expiration = ?"; params.push(expiration); }
   const rows = await query<any[]>(
-    `SELECT expiration, option_type, strike, last_price, bid, ask, volume, open_interest, implied_vol, in_the_money, currency, updated_at
+    `SELECT contract_symbol, expiration, option_type, strike, last_price, bid, ask, volume, open_interest, implied_vol, in_the_money, currency, updated_at
      FROM options WHERE instrument_id = ? ${extra} ORDER BY expiration, strike LIMIT 5000`,
     params
   );

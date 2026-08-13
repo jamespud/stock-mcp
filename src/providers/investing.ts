@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
-import { httpText } from "./http.js";
+import { httpFetch, httpText } from "./http.js";
 import type { AnalystForecast, Bar, Dividend, EarningsRecord, FinancialField, Holder, RatioValue } from "./types.js";
 
 const GQL_URL = "https://gql.api.investing.com/graphql";
@@ -86,7 +86,7 @@ async function investingRequest(
 ): Promise<{ status: number; text: string }> {
   if (transport === "go") return sidecarRequest(method, url, headers, body);
   try {
-    const res = await fetch(url, {
+    const res = await httpFetch(url, {
       method,
       headers: { "user-agent": config.userAgent, ...headers },
       body: body ?? undefined,

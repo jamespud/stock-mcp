@@ -31,4 +31,6 @@ export const config = {
   barsStartDate: process.env.BARS_START_DATE ?? "2000-01-01",
   barsProvider: (process.env.BARS_PROVIDER ?? "yahoo") as "yahoo" | "investing",
   newsCount: num(process.env.NEWS_COUNT, 20),
+  /** Optional HTTP(S) proxy for all Node fetch requests, e.g. http://127.0.0.1:17890 */
+  proxyUrl: process.env.PROXY_URL?.trim() || null,
 };
