@@ -1,4 +1,4 @@
-import { httpJson, httpText, HttpError } from "./http.js";
+import { httpFetch, httpJson, httpText, HttpError } from "./http.js";
 import type { Bar, Dividend, FinancialField, NewsItem, OptionChain, OptionQuote, RatioValue } from "./types.js";
 
 const CHART_HOST = "https://query1.finance.yahoo.com";
@@ -14,7 +14,7 @@ interface CrumbCache {
 let crumbCache: CrumbCache | null = null;
 
 async function refreshCrumb(): Promise<CrumbCache> {
-  const cookieRes = await fetch(COOKIE_URL, { headers: { "user-agent": process.env.USER_AGENT ?? "" } });
+  const cookieRes = await httpFetch(COOKIE_URL, { headers: { "user-agent": process.env.USER_AGENT ?? "" } });
   await cookieRes.text();
   if (cookieRes.status >= 500) throw new Error(`yahoo cookie HTTP ${cookieRes.status}`);
   const cookie = cookieRes.headers

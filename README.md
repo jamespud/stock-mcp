@@ -109,6 +109,7 @@ npm run build:all
 | `DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME` | 127.0.0.1/3306/stock/stock123/stock_mcp | MySQL 连接 |
 | `USER_AGENT` | Chrome 148 UA | 请求指纹 |
 | `REQUEST_DELAY_MS` | 300 | 请求间隔限流 |
+| `PROXY_URL` | 无 | 所有 Node fetch 请求使用的 HTTP(S) 代理，例如 `http://127.0.0.1:17890`；Yahoo 在大陆需配置 |
 | `BARS_START_DATE` | 2000-01-01 | 全量同步起点 |
 | `BARS_PROVIDER` | yahoo | K 线来源（yahoo/investing） |
 | `INVESTING_TRANSPORT` | auto | node / go / auto |

@@ -1,4 +1,12 @@
 import { config } from "../config.js";
+import { ProxyAgent } from "undici";
+
+const dispatcher: any = config.proxyUrl ? new ProxyAgent(config.proxyUrl) : undefined;
+
+/** Node fetch with the optional HTTP(S) proxy applied. */
+export function httpFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, dispatcher });
+}
 
 /** Minimal rate limiter: guarantees at least `intervalMs` between requests. */
 class RateLimiter {
@@ -43,7 +51,7 @@ export async function httpJson<T = any>(url: string, opts: HttpOptions = {}): Pr
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      const res = await fetch(url, {
+      const res = await httpFetch(url, {
         method,
         headers: {
           "user-agent": config.userAgent,
@@ -95,7 +103,7 @@ async function rawFetch(url: string, opts: HttpOptions): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
+    const res = await httpFetch(url, {
       method,
       headers: { "user-agent": config.userAgent, ...headers },
       body: body ?? undefined,
