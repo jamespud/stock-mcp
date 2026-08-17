@@ -34,6 +34,10 @@ const TOOLS = [
   "get_short_interest",
   "get_holder_breakdown",
   "get_intraday_bars",
+  "list_sectors",
+  "get_sector_performance",
+  "get_sector_members",
+  "sync_sectors",
   "sync_stock",
 ];
 
@@ -59,6 +63,9 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
   get_short_interest: { symbol: TEST_SYMBOL },
   get_holder_breakdown: { symbol: TEST_SYMBOL },
   get_intraday_bars: { symbol: TEST_SYMBOL, interval: "15m" },
+  list_sectors: {},
+  get_sector_performance: {},
+  get_sector_members: { sector: "ZZSEC", limit: 5 },
 };
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {

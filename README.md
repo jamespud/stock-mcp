@@ -30,6 +30,9 @@ npm run sync -- --symbol NVDA --intraday 15m
 # 同步所有已入库标的
 npm run sync -- --all --full
 
+# 同步全部 GICS 板块 ETF 行情 + 成分股（板块轮动数据）
+npm run sync -- --sectors
+
 # 3. 启动 MCP server（stdio）
 npm run server
 ```
@@ -72,6 +75,10 @@ npm test           # 两者一起
 | `get_short_interest` | 空头持仓快照：做空股数、short ratio、占流通盘比例（Yahoo defaultKeyStatistics） |
 | `get_holder_breakdown` | 持股结构：内部人/机构占比、机构占流通盘、机构数（Yahoo majorHoldersBreakdown） |
 | `get_intraday_bars` | 分钟级 K 线（1m/5m/15m/30m/60m，同步入库后查询） |
+| `list_sectors` | 板块目录：11 个 GICS 板块 + SPY 基准，映射到 SPDR 板块 ETF |
+| `get_sector_performance` | 板块轮动视图：各板块最新价 + 1d/5d/20d 涨跌幅排名 + SPY 基准对比 |
+| `get_sector_members` | 板块成分股（板块 ETF topHoldings，含权重） |
+| `sync_sectors` | 同步全部板块 ETF 行情（约 30 天 K 线）与成分股 |
 
 ## 数据源
 
@@ -93,6 +100,7 @@ npm test           # 两者一起
 | 空头持仓 | `short_interest` | Yahoo `defaultKeyStatistics`（sharesShort/shortRatio/占流通盘） |
 | 持股结构 | `holder_breakdown` | Yahoo `majorHoldersBreakdown`（内部人/机构占比） |
 | 分钟线 | `intraday_bars` | Yahoo chart v8（1m/5m/15m/30m/60m） |
+| 板块目录与轮动 | `sectors` / `sector_members` | GICS 11 板块 + SPY 基准，板块 ETF（XLC..XLU/SPY）行情 + `topHoldings` 成分股权重 |
 
 > 指数 / ETF / 跨资产（如 `^GSPC`、`^VIX`、`SPY`、`TLT`）可直接当作标的同步：Yahoo 原生支持指数行情，Investing 侧失败会被自动跳过，不影响 Yahoo 数据落库。
 
@@ -114,6 +122,7 @@ npm test           # 两者一起
 - 全量同步：从 `BARS_START_DATE`（默认 2000-01-01）拉全部日 K + 全部基本面 + 期权快照 + 新闻 + 数据清单（事件/内部人/分析师/盈利趋势/空头/基金等）。
 - 增量同步：按 `sync_state.last_bar_date` 只拉新 K 线，并刷新行情、比率、预测、新闻、期权快照与数据清单。
 - 分钟线：`--intraday <1m|5m|15m|30m|60m>` 拉取最近 7 天分钟 K 到 `intraday_bars`（幂等 upsert）。
+- 板块：`sync --sectors` 一键同步 11 个 GICS 板块 ETF（XLC..XLU）+ SPY 基准的行情与 `topHoldings` 成分股，`get_sector_performance` 输出板块轮动排名。
 - 期权行情：`get_options` 读取同步入库的快照；`get_option_quote` 每次直接从 Yahoo 按需拉取最新报价（含标的现价、可选到期日、行权价、方向过滤），无需先执行同步。
 - 所有写入均为幂等 upsert（`INSERT ... ON DUPLICATE KEY UPDATE`），可重复执行。
 - 限流已内置（默认 300ms/请求），Yahoo crumb 缓存 25 分钟，TVC token 缓存 25 分钟。

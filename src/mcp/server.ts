@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { syncOne } from "../services/sync.service.js";
+import { syncOne, syncSectors } from "../services/sync.service.js";
 import { fetchYahooOptionChain } from "../providers/yahoo.js";
 import * as q from "../services/query.service.js";
 import { closeDb } from "../db.js";
@@ -330,6 +330,57 @@ server.tool(
       const r = await q.getIntradayBars(symbol, interval, from, to, limit);
       if (!r) throw new Error(`instrument not found in DB: ${symbol}`);
       return r;
+    })
+);
+
+server.tool(
+  "list_sectors",
+  "List the GICS sector catalog (11 sectors + S&P 500 benchmark), each mapped to its SPDR sector ETF.",
+  {},
+  async () => guard(async () => {
+    const r = await q.listSectors();
+    if (!r) throw new Error("sector catalog not found (run db:init / sync_sectors)");
+    return r;
+  })
+);
+
+server.tool(
+  "get_sector_performance",
+  "Sector rotation view: latest price and 1d/5d/20d returns for every GICS sector ETF, ranked by 1-day change, plus the SPY benchmark.",
+  {},
+  async () => guard(async () => {
+    const r = await q.getSectorPerformance();
+    if (!r?.sectors.length) throw new Error("no sector data synced yet (run sync_sectors first)");
+    return r;
+  })
+);
+
+server.tool(
+  "get_sector_members",
+  "Get a sector's top constituents with weights (from the sector ETF's topHoldings).",
+  {
+    sector: z.string().describe("Sector code, e.g. XLK (Technology) or ETF symbol"),
+    limit: z.number().int().min(1).max(200).optional().default(20),
+  },
+  async ({ sector, limit }) =>
+    guard(async () => {
+      const code = sector.toUpperCase();
+      const r = await q.getSectorMembers(code, limit);
+      if (!r) throw new Error(`no members for sector ${code} (run sync_sectors first)`);
+      return r;
+    })
+);
+
+server.tool(
+  "sync_sectors",
+  "Sync all GICS sector ETFs (quote, ~30d bars) and their top-holding constituents into the database. members=false skips constituent refresh.",
+  {
+    members: z.boolean().optional().default(true).describe("Also refresh sector_members from ETF topHoldings"),
+  },
+  async ({ members }) =>
+    guard(async () => {
+      const r = await syncSectors({ members });
+      return { synced: r.length, sectors: r };
     })
 );
 

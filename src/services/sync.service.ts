@@ -11,6 +11,7 @@ import {
   extractRatiosFromSummary,
   extractRecommendationTrend,
   extractShortInterest,
+  extractTopHoldings,
   extractUpgradeDowngrades,
   yahooNum,
   fetchYahooBars,
@@ -569,4 +570,85 @@ export async function syncAll(opts: { full: boolean; intraday?: IntradayInterval
       console.error(`[${r.symbol}] sync failed: ${e.message}`);
     }
   }
+}
+
+// ── sector data (GICS sector ETFs + top holdings) ──────────────
+
+interface SectorRow {
+  sector_code: string;
+  name: string;
+  etf_symbol: string;
+  is_benchmark: number;
+  instrument_id: number | null;
+}
+
+/** Sync a single sector ETF: quote ratios + incremental bars + top holdings -> sector_members. */
+async function syncSectorEtf(sector: SectorRow): Promise<{ bars: number; members: number }> {
+  const today = new Date().toISOString().slice(0, 10);
+  const etf = sector.etf_symbol;
+  const instrument = await ensureInstrument(etf);
+  await query(
+    "UPDATE sectors SET instrument_id = ? WHERE sector_code = ?",
+    [instrument.id, sector.sector_code]
+  );
+
+  // incremental bars (last ~30 days)
+  const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const bars = await fetchYahooBars(instrument.yahoo_symbol ?? etf, "1d", from, today);
+  let barsN = 0;
+  if (bars.length) {
+    const sql =
+      `INSERT INTO daily_bars (instrument_id, trade_date, open, high, low, close, adj_close, volume, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'yahoo')
+       ON DUPLICATE KEY UPDATE open = VALUES(open), high = VALUES(high), low = VALUES(low),
+         close = VALUES(close), adj_close = VALUES(adj_close), volume = VALUES(volume)`;
+    const stmts = bars.map((b): [string, any[]] => [
+      sql, [instrument.id, b.date, b.open, b.high, b.low, b.close, b.adjClose, b.volume],
+    ]);
+    for (let i = 0; i < stmts.length; i += 500) await runBatch(stmts.slice(i, i + 500));
+    barsN = bars.length;
+  }
+
+  // summary ratios
+  const summary = await fetchYahooSummary(instrument.yahoo_symbol ?? etf).catch(() => null);
+  if (summary) {
+    await saveRatios(instrument.id, extractRatiosFromSummary(summary.modules, etf, today));
+  }
+
+  // top holdings -> sector members
+  let membersN = 0;
+  if (summary) {
+    const members = extractTopHoldings(summary.modules);
+    if (members.length) {
+      await query("DELETE FROM sector_members WHERE sector_code = ? AND source = 'yahoo'", [sector.sector_code]);
+      const stmts = members.map((m): [string, any[]] => [
+        `INSERT INTO sector_members (sector_code, symbol, name, weight, source)
+         VALUES (?, ?, ?, ?, 'yahoo')
+         ON DUPLICATE KEY UPDATE name = VALUES(name), weight = VALUES(weight)`,
+        [sector.sector_code, m.symbol, m.name, m.weight],
+      ]);
+      await runBatch(stmts);
+      membersN = members.length;
+    }
+  }
+
+  return { bars: barsN, members: membersN };
+}
+
+export async function syncSectors(opts: { members?: boolean } = {}): Promise<Array<{ sector_code: string; name: string; bars: number; members: number }>> {
+  const rows = await query<SectorRow[]>(
+    "SELECT sector_code, name, etf_symbol, is_benchmark, instrument_id FROM sectors ORDER BY is_benchmark, sector_code"
+  );
+  const out: Array<{ sector_code: string; name: string; bars: number; members: number }> = [];
+  for (const s of rows) {
+    try {
+      const r = await syncSectorEtf(s);
+      out.push({ sector_code: s.sector_code, name: s.name, ...r });
+      console.log(`[sector:${s.sector_code}] etf=${s.etf_symbol} bars=${r.bars} members=${r.members}`);
+    } catch (e: any) {
+      console.error(`[sector:${s.sector_code}] sync failed: ${e.message}`);
+      out.push({ sector_code: s.sector_code, name: s.name, bars: 0, members: 0 });
+    }
+  }
+  return out;
 }

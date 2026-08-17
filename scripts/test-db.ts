@@ -91,6 +91,18 @@ async function main() {
     assert.equal((await q.getIntradayBars(TEST_SYMBOL, "1m"))?.bars.length, 0, "interval filter works");
     assert.equal(await q.getIntradayBars("QQQQNOPE", "15m"), null);
 
+    // --- sector queries ---
+    const sectors = await q.listSectors();
+    assert.ok(sectors?.sectors.some((x: any) => x.sector_code === "XLK"), "sector catalog has XLK");
+    assert.ok(sectors?.sectors.some((x: any) => x.sector_code === "SPY"), "sector catalog has SPY benchmark");
+    assert.ok(sectors?.sectors.some((x: any) => x.sector_code === "ZZSEC"), "sector catalog has test sector");
+    const perf = await q.getSectorPerformance();
+    assert.ok(perf?.sectors.some((x: any) => x.sector_code === "ZZSEC" && x.price != null), "sector performance has test sector price");
+    const mem = await q.getSectorMembers("ZZSEC", 5);
+    assert.equal(mem?.members.length, 1);
+    assert.equal(mem?.members[0].symbol, "ZZTEST");
+    assert.equal(await q.getSectorMembers("QQQQNOPE"), null);
+
     console.log("db tests OK");
   } finally {
     await cleanupTestData();

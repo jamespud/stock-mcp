@@ -127,6 +127,7 @@ const SUMMARY_MODULES = [
   "upgradeDowngradeHistory",
   "summaryProfile",
   "esgScores",
+  "topHoldings",
 ].join(",");
 
 export interface YahooSummary {
@@ -593,4 +594,30 @@ export async function fetchYahooIntradayBars(
   const byTs = new Map<string, IntradayBar>();
   for (const b of out) byTs.set(b.ts, b);
   return [...byTs.values()];
+}
+
+
+// ── sector data (ETF topHoldings) ──────────────────────────────
+
+export interface SectorHolding {
+  symbol: string;
+  name: string | null;
+  weight: number | null; // fraction (e.g. 0.1379 = 13.79%)
+  source: string;
+}
+
+/** Extract top holdings (sector ETF constituents) from quoteSummary topHoldings module. */
+export function extractTopHoldings(modules: Record<string, any>): SectorHolding[] {
+  const out: SectorHolding[] = [];
+  for (const h of modules.topHoldings?.holdings ?? []) {
+    const symbol = h.symbol ?? h.yahooSymbol;
+    if (!symbol) continue;
+    out.push({
+      symbol: String(symbol),
+      name: h.holdingName ?? h.name ?? null,
+      weight: num(h.holdingPercent ?? h.percentHeld ?? h.percentOfTotal),
+      source: "yahoo",
+    });
+  }
+  return out;
 }

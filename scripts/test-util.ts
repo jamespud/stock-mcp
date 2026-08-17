@@ -34,6 +34,8 @@ export async function cleanupTestData(): Promise<void> {
       [TEST_SYMBOL]
     );
   }
+  await pool.query("DELETE FROM sector_members WHERE sector_code = 'ZZSEC'");
+  await pool.query("DELETE FROM sectors WHERE sector_code = 'ZZSEC'");
   await pool.query("DELETE FROM instruments WHERE symbol = ?", [TEST_SYMBOL]);
 }
 
@@ -180,6 +182,19 @@ export async function seedTestData(): Promise<number> {
      VALUES (?, '2026-08-03 14:30:00', '15m', 12.0, 12.5, 11.9, 12.4, 800, 'yahoo'),
             (?, '2026-08-03 14:45:00', '15m', 12.4, 12.8, 12.3, 12.7, 900, 'yahoo')`,
     [id, id]
+  );
+
+
+  await pool.query(
+    `INSERT INTO sectors (sector_code, name, etf_symbol, is_benchmark, instrument_id)
+     VALUES ('ZZSEC', 'Test Sector', 'ZZET', 0, ?)
+     ON DUPLICATE KEY UPDATE instrument_id = VALUES(instrument_id)`,
+    [id]
+  );
+
+  await pool.query(
+    `INSERT INTO sector_members (sector_code, symbol, name, weight, source)
+     VALUES ('ZZSEC', 'ZZTEST', 'ZZ Test Corp', 0.5, 'yahoo')`,
   );
 
   await pool.query(

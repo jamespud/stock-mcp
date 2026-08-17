@@ -1,5 +1,5 @@
 import { closeDb, initSchema } from "./db.js";
-import { syncAll, syncOne, type IntradayInterval } from "./services/sync.service.js";
+import { syncAll, syncOne, syncSectors, type IntradayInterval } from "./services/sync.service.js";
 import { startMcpServer } from "./mcp/server.js";
 
 const INTRADAY_INTERVALS = ["1m", "5m", "15m", "30m", "60m"] as const;
@@ -11,6 +11,8 @@ function parseArgs(argv: string[]) {
   let symbol: string | undefined;
   let all = false;
   let full = false;
+  let sectors = false;
+  let sectorMembers = true;
   let intraday: IntradayInterval | undefined;
   for (let i = 1; i < args.length; i++) {
     const a = args[i];
@@ -18,6 +20,8 @@ function parseArgs(argv: string[]) {
     else if (a === "--all") all = true;
     else if (a === "--full") full = true;
     else if (a === "--incremental") full = false;
+    else if (a === "--sectors") sectors = true;
+    else if (a === "--no-members") sectorMembers = false;
     else if (a === "--intraday") {
       const iv = args[i + 1] && !args[i + 1].startsWith("--") ? args[++i] : "15m";
       if (!(INTRADAY_INTERVALS as readonly string[]).includes(iv)) {
@@ -28,11 +32,11 @@ function parseArgs(argv: string[]) {
     }
     else if (a.startsWith("--")) flags.set(a, args[i + 1] ?? "");
   }
-  return { cmd, symbol, all, full, intraday };
+  return { cmd, symbol, all, full, sectors, sectorMembers, intraday };
 }
 
 async function main() {
-  const { cmd, symbol, all, full, intraday } = parseArgs(process.argv);
+  const { cmd, symbol, all, full, sectors, sectorMembers, intraday } = parseArgs(process.argv);
 
   switch (cmd) {
     case "db:init":
@@ -40,14 +44,16 @@ async function main() {
       break;
 
     case "sync":
-      if (all) {
+      if (sectors) {
+        await syncSectors({ members: sectorMembers });
+      } else if (all) {
         await syncAll({ full, intraday });
       } else if (symbol) {
         const r = await syncOne(symbol, { full, intraday });
         console.log(`synced ${symbol}: bars=${r.bars} news=${r.news} options=${r.options} intraday=${r.intraday}`);
       } else {
         console.error(
-          "usage: stock-mcp sync --symbol NVDA [--full|--incremental] [--intraday 15m] | sync --all [--full] [--intraday 15m]"
+          "usage: stock-mcp sync --symbol NVDA [--full|--incremental] [--intraday 15m] | sync --all [--full] [--intraday 15m] | sync --sectors [--no-members]"
         );
         process.exitCode = 1;
       }

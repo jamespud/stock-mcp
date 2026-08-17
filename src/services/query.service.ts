@@ -347,3 +347,71 @@ export async function getIntradayBars(symbol: string, interval: string, from?: s
   );
   return { symbol: inst.symbol, interval, bars: rows };
 }
+
+// ── sector queries ─────────────────────────────────────────────
+
+export async function listSectors() {
+  const rows = await query<any[]>(
+    `SELECT s.sector_code, s.name, s.etf_symbol, s.is_benchmark, s.instrument_id,
+       (SELECT MAX(trade_date) FROM daily_bars WHERE instrument_id = s.instrument_id) AS last_bar_date
+     FROM sectors s ORDER BY s.is_benchmark, s.sector_code`
+  );
+  return { sectors: rows };
+}
+
+/** Sector rotation view: latest price + 1d/5d/20d returns for every sector ETF and the SPY benchmark. */
+export async function getSectorPerformance() {
+  const rows = await query<any[]>(
+    `SELECT s.sector_code, s.name, s.etf_symbol, s.is_benchmark,
+       d.trade_date, d.close, d.volume
+     FROM sectors s
+     JOIN daily_bars d ON d.instrument_id = s.instrument_id AND d.source = 'yahoo'
+     WHERE d.trade_date >= DATE_SUB(CURDATE(), INTERVAL 45 DAY)
+     ORDER BY s.sector_code, d.trade_date`
+  );
+  const bySector = new Map<string, any[]>();
+  for (const r of rows) {
+    const arr = bySector.get(r.sector_code) ?? [];
+    arr.push(r);
+    bySector.set(r.sector_code, arr);
+  }
+  const perf = (bars: any[]) => {
+    const n = bars.length;
+    const latest = bars[n - 1];
+    const ago = (k: number) => bars[Math.max(0, n - 1 - k)];
+    const pct = (a: any, b: any) => (a && b && b.close != null && a.close != null && b.close !== 0 ? ((a.close - b.close) / b.close) * 100 : null);
+    return {
+      price: latest?.close ?? null,
+      tradeDate: latest?.trade_date ?? null,
+      change1d: pct(latest, ago(1)),
+      change5d: pct(latest, ago(5)),
+      change20d: pct(latest, ago(20)),
+    };
+  };
+  const sectors: any[] = [];
+  let benchmark: any = null;
+  for (const [code, bars] of bySector) {
+    const meta = rows.find((r) => r.sector_code === code);
+    const item = {
+      sector_code: code,
+      name: meta?.name,
+      etf_symbol: meta?.etf_symbol,
+      ...perf(bars),
+    };
+    if (meta?.is_benchmark) benchmark = item;
+    else sectors.push(item);
+  }
+  sectors.sort((a, b) => (b.change1d ?? -Infinity) - (a.change1d ?? -Infinity));
+  return { asOf: new Date().toISOString().slice(0, 10), benchmark, sectors };
+}
+
+export async function getSectorMembers(sector: string, limit = 20) {
+  const rows = await query<any[]>(
+    `SELECT symbol, name, weight, source, updated_at FROM sector_members
+     WHERE sector_code = ?
+     ORDER BY weight DESC LIMIT ${Math.max(1, Math.min(limit, 200))}`,
+    [sector]
+  );
+  if (rows.length === 0) return null;
+  return { sector_code: sector, members: rows };
+}

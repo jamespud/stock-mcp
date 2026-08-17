@@ -314,3 +314,46 @@ CREATE TABLE IF NOT EXISTS intraday_bars (
   PRIMARY KEY (instrument_id, bar_interval, ts),
   KEY idx_intraday (instrument_id, bar_interval, ts)
 ) ENGINE=InnoDB;
+
+-- ============================================================
+-- Sector / industry data (GICS 11 sectors via SPDR sector ETFs)
+--   sectors        : 板块目录（代码 + 名称 + 板块 ETF + 基准标记）
+--   sector_members : 板块成分股（来自板块 ETF topHoldings，含权重）
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS sectors (
+  sector_code VARCHAR(8) PRIMARY KEY,
+  name VARCHAR(64) NOT NULL,
+  etf_symbol VARCHAR(16) NOT NULL,
+  is_benchmark TINYINT(1) NOT NULL DEFAULT 0,
+  instrument_id BIGINT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_sector_etf (etf_symbol)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS sector_members (
+  sector_code VARCHAR(8) NOT NULL,
+  symbol VARCHAR(32) NOT NULL,
+  name VARCHAR(255) NULL,
+  weight DECIMAL(10,6) NULL,
+  source VARCHAR(16) NOT NULL DEFAULT 'yahoo',
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (sector_code, symbol),
+  KEY idx_member_sector_weight (sector_code, weight)
+) ENGINE=InnoDB;
+
+-- GICS 11 sectors + SPY benchmark (idempotent seed)
+INSERT INTO sectors (sector_code, name, etf_symbol, is_benchmark) VALUES
+  ('XLC', 'Communication Services', 'XLC', 0),
+  ('XLY', 'Consumer Discretionary', 'XLY', 0),
+  ('XLP', 'Consumer Staples', 'XLP', 0),
+  ('XLE', 'Energy', 'XLE', 0),
+  ('XLF', 'Financials', 'XLF', 0),
+  ('XLV', 'Health Care', 'XLV', 0),
+  ('XLI', 'Industrials', 'XLI', 0),
+  ('XLB', 'Materials', 'XLB', 0),
+  ('XLRE', 'Real Estate', 'XLRE', 0),
+  ('XLK', 'Technology', 'XLK', 0),
+  ('XLU', 'Utilities', 'XLU', 0),
+  ('SPY', 'S&P 500 (benchmark)', 'SPY', 1)
+ON DUPLICATE KEY UPDATE name = VALUES(name), etf_symbol = VALUES(etf_symbol), is_benchmark = VALUES(is_benchmark);
