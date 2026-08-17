@@ -208,16 +208,143 @@ server.tool(
 );
 
 server.tool(
+  "get_company_events",
+  "Get forward-looking company events: next earnings date, earnings call, ex-dividend and dividend payment dates.",
+  {
+    symbol: z.string().describe("Ticker, e.g. NVDA"),
+    limit: z.number().int().min(1).max(100).optional().default(20),
+  },
+  async ({ symbol, limit }) =>
+    guard(async () => {
+      const r = await q.getCompanyEvents(symbol, limit);
+      if (!r) throw new Error(`instrument not found in DB: ${symbol} (run sync_stock first)`);
+      return r;
+    })
+);
+
+server.tool(
+  "get_insider_transactions",
+  "Get insider (officer/director) buy/sell transactions.",
+  {
+    symbol: z.string().describe("Ticker, e.g. NVDA"),
+    limit: z.number().int().min(1).max(100).optional().default(20),
+  },
+  async ({ symbol, limit }) =>
+    guard(async () => {
+      const r = await q.getInsiderTransactions(symbol, limit);
+      if (!r) throw new Error(`instrument not found in DB: ${symbol}`);
+      return r;
+    })
+);
+
+server.tool(
+  "get_analyst_actions",
+  "Get analyst upgrades, downgrades and price-target changes.",
+  {
+    symbol: z.string().describe("Ticker, e.g. NVDA"),
+    limit: z.number().int().min(1).max(100).optional().default(20),
+  },
+  async ({ symbol, limit }) =>
+    guard(async () => {
+      const r = await q.getAnalystActions(symbol, limit);
+      if (!r) throw new Error(`instrument not found in DB: ${symbol}`);
+      return r;
+    })
+);
+
+server.tool(
+  "get_earnings_trend",
+  "Get quarterly earnings estimate trend: EPS/revenue estimates, growth and recent revisions.",
+  { symbol: z.string().describe("Ticker, e.g. NVDA") },
+  async ({ symbol }) =>
+    guard(async () => {
+      const r = await q.getEarningsTrend(symbol);
+      if (!r) throw new Error(`instrument not found in DB: ${symbol}`);
+      return r;
+    })
+);
+
+server.tool(
+  "get_recommendation_trend",
+  "Get analyst recommendation trend (strong buy/buy/hold/sell/strong sell) by period.",
+  { symbol: z.string().describe("Ticker, e.g. NVDA") },
+  async ({ symbol }) =>
+    guard(async () => {
+      const r = await q.getRecommendationTrend(symbol);
+      if (!r) throw new Error(`instrument not found in DB: ${symbol}`);
+      return r;
+    })
+);
+
+server.tool(
+  "get_fund_holders",
+  "Get mutual fund / fund ownership positions.",
+  {
+    symbol: z.string().describe("Ticker, e.g. NVDA"),
+    limit: z.number().int().min(1).max(100).optional().default(20),
+  },
+  async ({ symbol, limit }) =>
+    guard(async () => {
+      const r = await q.getFundHolders(symbol, limit);
+      if (!r) throw new Error(`instrument not found in DB: ${symbol}`);
+      return r;
+    })
+);
+
+server.tool(
+  "get_short_interest",
+  "Get short interest snapshot: shares short, short ratio, % of float, days to cover.",
+  { symbol: z.string().describe("Ticker, e.g. NVDA") },
+  async ({ symbol }) =>
+    guard(async () => {
+      const r = await q.getShortInterest(symbol);
+      if (!r) throw new Error(`instrument not found in DB: ${symbol}`);
+      return r;
+    })
+);
+
+server.tool(
+  "get_holder_breakdown",
+  "Get ownership structure: insider % and institutional % held, float % and count.",
+  { symbol: z.string().describe("Ticker, e.g. NVDA") },
+  async ({ symbol }) =>
+    guard(async () => {
+      const r = await q.getHolderBreakdown(symbol);
+      if (!r) throw new Error(`instrument not found in DB: ${symbol}`);
+      return r;
+    })
+);
+
+server.tool(
+  "get_intraday_bars",
+  "Get intraday OHLCV bars (1m/5m/15m/30m/60m) stored in the database. Run sync_stock with mode=intraday_15m etc. to populate.",
+  {
+    symbol: z.string().describe("Ticker, e.g. NVDA"),
+    interval: z.enum(["1m", "5m", "15m", "30m", "60m"]).default("15m"),
+    from: z.string().optional().describe("Start datetime YYYY-MM-DD"),
+    to: z.string().optional().describe("End datetime YYYY-MM-DD"),
+    limit: z.number().int().min(1).max(20000).optional().default(5000),
+  },
+  async ({ symbol, interval, from, to, limit }) =>
+    guard(async () => {
+      const r = await q.getIntradayBars(symbol, interval, from, to, limit);
+      if (!r) throw new Error(`instrument not found in DB: ${symbol}`);
+      return r;
+    })
+);
+
+server.tool(
   "sync_stock",
   "Sync a stock from providers into the local MySQL database. full = complete history from 2000; incremental = only new data.",
   {
     symbol: z.string().describe("Ticker, e.g. NVDA"),
     mode: z.enum(["incremental", "full"]).default("incremental"),
+    intraday: z.enum(["1m", "5m", "15m", "30m", "60m"]).optional().describe("Also sync intraday bars at this interval"),
   },
-  async ({ symbol, mode }) =>
+  async ({ symbol, mode, intraday }) =>
     guard(async () => {
-      const r = await syncOne(symbol, { full: mode === "full" });
-      return { synced: symbol, mode, ...r };
+      const r = await syncOne(symbol, { full: mode === "full", intraday: intraday ?? null });
+      return { synced: symbol, mode, syncedIntraday: intraday ?? null, ...r };
     })
 );
 

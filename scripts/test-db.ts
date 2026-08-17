@@ -68,6 +68,29 @@ async function main() {
     assert.equal(await q.getOptions("QQQQNOPE"), null);
     assert.equal(await q.getNews("QQQQNOPE"), null);
 
+    // --- data-checklist queries ---
+    const evts = await q.getCompanyEvents(TEST_SYMBOL);
+    assert.equal(evts?.events.length, 2, "company_events seeded");
+    assert.equal(evts?.events[0].event_type, "EARNINGS", "events ordered by date");
+    assert.equal(await q.getCompanyEvents("QQQQNOPE"), null);
+
+    assert.equal((await q.getInsiderTransactions(TEST_SYMBOL, 5))?.transactions.length, 1);
+    assert.equal((await q.getInsiderTransactions(TEST_SYMBOL, 0))?.transactions.length, 1, "limit clamped >= 1");
+    assert.equal((await q.getAnalystActions(TEST_SYMBOL, 5))?.actions.length, 1);
+    assert.equal((await q.getAnalystActions(TEST_SYMBOL, 0))?.actions.length, 1);
+    assert.equal((await q.getEarningsTrend(TEST_SYMBOL))?.trend.length, 1);
+    assert.equal((await q.getRecommendationTrend(TEST_SYMBOL))?.trend.length, 1);
+    const funds = await q.getFundHolders(TEST_SYMBOL, 5);
+    assert.equal(funds?.holders.length, 1);
+    assert.equal(funds?.holders[0].owner_name, "Test Mutual Fund");
+    assert.equal((await q.getFundHolders(TEST_SYMBOL, 0))?.holders.length, 1);
+    assert.equal((await q.getShortInterest(TEST_SYMBOL))?.shortInterest.length, 1);
+    assert.equal((await q.getHolderBreakdown(TEST_SYMBOL))?.breakdown.length, 1);
+    const intra = await q.getIntradayBars(TEST_SYMBOL, "15m");
+    assert.equal(intra?.bars.length, 2, "intraday bars seeded");
+    assert.equal((await q.getIntradayBars(TEST_SYMBOL, "1m"))?.bars.length, 0, "interval filter works");
+    assert.equal(await q.getIntradayBars("QQQQNOPE", "15m"), null);
+
     console.log("db tests OK");
   } finally {
     await cleanupTestData();

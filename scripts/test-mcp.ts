@@ -25,6 +25,15 @@ const TOOLS = [
   "get_news",
   "get_options",
   "get_option_quote",
+  "get_company_events",
+  "get_insider_transactions",
+  "get_analyst_actions",
+  "get_earnings_trend",
+  "get_recommendation_trend",
+  "get_fund_holders",
+  "get_short_interest",
+  "get_holder_breakdown",
+  "get_intraday_bars",
   "sync_stock",
 ];
 
@@ -41,6 +50,15 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
   get_holders: { symbol: TEST_SYMBOL, limit: 5 },
   get_news: { symbol: TEST_SYMBOL, limit: 10 },
   get_options: { symbol: TEST_SYMBOL },
+  get_company_events: { symbol: TEST_SYMBOL },
+  get_insider_transactions: { symbol: TEST_SYMBOL, limit: 5 },
+  get_analyst_actions: { symbol: TEST_SYMBOL, limit: 5 },
+  get_earnings_trend: { symbol: TEST_SYMBOL },
+  get_recommendation_trend: { symbol: TEST_SYMBOL },
+  get_fund_holders: { symbol: TEST_SYMBOL, limit: 5 },
+  get_short_interest: { symbol: TEST_SYMBOL },
+  get_holder_breakdown: { symbol: TEST_SYMBOL },
+  get_intraday_bars: { symbol: TEST_SYMBOL, interval: "15m" },
 };
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {

@@ -7,6 +7,15 @@ const CHILD_TABLES = [
   "sync_state",
   "options",
   "holders",
+  "fund_holders",
+  "holder_breakdown",
+  "short_interest",
+  "company_events",
+  "insider_transactions",
+  "analyst_actions",
+  "earnings_trend",
+  "recommendation_trend",
+  "intraday_bars",
   "earnings",
   "analyst_forecasts",
   "dividends_summary",
@@ -113,6 +122,63 @@ export async function seedTestData(): Promise<number> {
     `INSERT INTO news (id, instrument_id, symbols, title, link, publisher, published_at, news_type)
      VALUES ('zztest-news-1', ?, 'ZZTEST', 'Test News 1', 'https://example.com/1', 'Test Publisher', '2026-08-01 10:00:00', 'NEWS'),
             ('zztest-news-2', ?, 'ZZTEST', 'Test News 2', 'https://example.com/2', 'Test Publisher', '2026-08-02 10:00:00', 'NEWS')`,
+    [id, id]
+  );
+
+
+  await pool.query(
+    `INSERT INTO company_events (instrument_id, event_type, event_date, details, source)
+     VALUES (?, 'EARNINGS', '2026-08-20', NULL, 'yahoo'),
+            (?, 'EX_DIVIDEND', '2026-09-01', NULL, 'yahoo')`,
+    [id, id]
+  );
+
+  await pool.query(
+    `INSERT INTO insider_transactions (instrument_id, transaction_date, insider_name, title, transaction_text, shares, value, ownership, source)
+     VALUES (?, '2026-07-15', 'CEO Test', 'Chief Executive Officer', 'Sale at price 10.00 per share.', 10000, 100000, 'D', 'yahoo')`,
+    [id]
+  );
+
+  await pool.query(
+    `INSERT INTO analyst_actions (instrument_id, action_date, firm, from_grade, to_grade, action_type, price_target_action, current_price_target, prior_price_target, source)
+     VALUES (?, '2026-07-20', 'Test Broker', 'Hold', 'Buy', 'up', 'Raises', 150, 120, 'yahoo')`,
+    [id]
+  );
+
+  await pool.query(
+    `INSERT INTO earnings_trend (instrument_id, period_end, period_label, eps_estimate, eps_growth, revenue_estimate, revenue_growth, n_analysts, source)
+     VALUES (?, '2026-10-31', '+1q', 1.5, 0.2, 1000, 0.15, 12, 'yahoo')`,
+    [id]
+  );
+
+  await pool.query(
+    `INSERT INTO recommendation_trend (instrument_id, period_label, strong_buy, buy, hold, sell, strong_sell, source)
+     VALUES (?, '0m', 2, 5, 1, 0, 0, 'yahoo')`,
+    [id]
+  );
+
+  await pool.query(
+    `INSERT INTO fund_holders (instrument_id, holding_date, owner_name, pct_held, position, value, pct_change, source)
+     VALUES (?, '2026-03-31', 'Test Mutual Fund', 3.5, 50000, 600000, 0.5, 'yahoo')`,
+    [id]
+  );
+
+  await pool.query(
+    `INSERT INTO short_interest (instrument_id, as_of, shares_short, short_ratio, short_percent_of_float, shares_percent_shares_out, short_date, source)
+     VALUES (?, '2026-08-10', 1000000, 3.5, 0.05, 0.04, '2026-08-07', 'yahoo')`,
+    [id]
+  );
+
+  await pool.query(
+    `INSERT INTO holder_breakdown (instrument_id, as_of, insiders_percent, institutions_percent, institutions_float_percent, institutions_count, source)
+     VALUES (?, '2026-08-10', 2.5, 60.0, 65.0, 1200, 'yahoo')`,
+    [id]
+  );
+
+  await pool.query(
+    `INSERT INTO intraday_bars (instrument_id, ts, bar_interval, open, high, low, close, volume, source)
+     VALUES (?, '2026-08-03 14:30:00', '15m', 12.0, 12.5, 11.9, 12.4, 800, 'yahoo'),
+            (?, '2026-08-03 14:45:00', '15m', 12.4, 12.8, 12.3, 12.7, 900, 'yahoo')`,
     [id, id]
   );
 

@@ -2,16 +2,25 @@ import { config } from "../config.js";
 import { query, runBatch } from "../db.js";
 import { fetchInvestingBars, fetchInvestingSnapshot } from "../providers/investing.js";
 import {
+  extractCalendarEvents,
   extractDividendsFromSummary,
+  extractEarningsTrend,
+  extractFundHolders,
+  extractHolderBreakdown,
+  extractInsiderTransactions,
   extractRatiosFromSummary,
+  extractRecommendationTrend,
+  extractShortInterest,
+  extractUpgradeDowngrades,
   yahooNum,
   fetchYahooBars,
   fetchYahooFundamentals,
+  fetchYahooIntradayBars,
   fetchYahooNews,
   fetchYahooOptions,
   fetchYahooSummary,
 } from "../providers/yahoo.js";
-import type { Bar, FinancialField, RatioValue } from "../providers/types.js";
+import type { Bar, FinancialField, IntradayBar, RatioValue } from "../providers/types.js";
 
 interface InstrumentRow {
   id: number;
@@ -19,6 +28,8 @@ interface InstrumentRow {
   yahoo_symbol: string | null;
   investing_id: number | null;
 }
+
+export type IntradayInterval = "1m" | "5m" | "15m" | "30m" | "60m";
 
 // ── instrument resolution ───────────────────────────────────────
 
@@ -120,12 +131,169 @@ async function saveRatios(instrumentId: number, ratios: RatioValue[]): Promise<v
   await runBatch(stmts);
 }
 
+// ── data-checklist persistence (Yahoo modules / Investing calendar) ──
+
+/** Persist the new data-checklist rows from the already-fetched Yahoo quoteSummary modules. */
+async function syncYahooChecklist(instrument: InstrumentRow, modules: Record<string, any>): Promise<void> {
+  // Each dataset is guarded independently so a single provider edge-case never
+  // aborts the rest of the checklist.
+  const safe = async (name: string, fn: () => Promise<void>) => {
+    try {
+      await fn();
+    } catch (e: any) {
+      console.warn(`[checklist:${name}] failed: ${e.message}`);
+    }
+  };
+
+  await safe("short_interest", async () => {
+    const si = extractShortInterest(modules);
+    if (!si) return;
+    await query(
+      `INSERT INTO short_interest (instrument_id, as_of, shares_short, shares_short_prior_month, short_ratio, short_percent_of_float, shares_percent_shares_out, short_date, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'yahoo')
+       ON DUPLICATE KEY UPDATE shares_short = VALUES(shares_short), shares_short_prior_month = VALUES(shares_short_prior_month),
+         short_ratio = VALUES(short_ratio), short_percent_of_float = VALUES(short_percent_of_float),
+         shares_percent_shares_out = VALUES(shares_percent_shares_out), short_date = VALUES(short_date)`,
+      [instrument.id, si.asOf, si.sharesShort, si.sharesShortPriorMonth, si.shortRatio, si.shortPercentOfFloat, si.sharesPercentSharesOut, si.shortDate]
+    );
+  });
+
+  await safe("holder_breakdown", async () => {
+    const hb = extractHolderBreakdown(modules);
+    if (!hb) return;
+    await query(
+      `INSERT INTO holder_breakdown (instrument_id, as_of, insiders_percent, institutions_percent, institutions_float_percent, institutions_count, source)
+       VALUES (?, ?, ?, ?, ?, ?, 'yahoo')
+       ON DUPLICATE KEY UPDATE insiders_percent = VALUES(insiders_percent), institutions_percent = VALUES(institutions_percent),
+         institutions_float_percent = VALUES(institutions_float_percent), institutions_count = VALUES(institutions_count)`,
+      [instrument.id, hb.asOf, hb.insidersPercent, hb.institutionsPercent, hb.institutionsFloatPercent, hb.institutionsCount]
+    );
+  });
+
+  await safe("insider_transactions", async () => {
+    const insiders = extractInsiderTransactions(modules);
+    if (!insiders.length) return;
+    const stmts = insiders.map((t): [string, any[]] => [
+      `INSERT INTO insider_transactions (instrument_id, transaction_date, insider_name, title, transaction_text, shares, value, ownership, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'yahoo')
+       ON DUPLICATE KEY UPDATE shares = VALUES(shares), value = VALUES(value)`,
+      [instrument.id, t.transactionDate, t.insiderName, t.title, t.transactionText, t.shares, t.value, t.ownership],
+    ]);
+    await runBatch(stmts);
+  });
+
+  await safe("analyst_actions", async () => {
+    const actions = extractUpgradeDowngrades(modules);
+    if (!actions.length) return;
+    const stmts = actions.map((a): [string, any[]] => [
+      `INSERT INTO analyst_actions (instrument_id, action_date, firm, from_grade, to_grade, action_type, price_target_action, current_price_target, prior_price_target, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'yahoo')
+       ON DUPLICATE KEY UPDATE action_type = VALUES(action_type), price_target_action = VALUES(price_target_action),
+         current_price_target = VALUES(current_price_target), prior_price_target = VALUES(prior_price_target)`,
+      [instrument.id, a.actionDate, a.firm, a.fromGrade, a.toGrade, a.actionType, a.priceTargetAction, a.currentPriceTarget, a.priorPriceTarget],
+    ]);
+    await runBatch(stmts);
+  });
+
+  await safe("company_events", async () => {
+    const events = extractCalendarEvents(modules);
+    if (!events.length) return;
+    const stmts = events.map((e): [string, any[]] => [
+      `INSERT INTO company_events (instrument_id, event_type, event_date, details, source)
+       VALUES (?, ?, ?, ?, 'yahoo')
+       ON DUPLICATE KEY UPDATE event_date = VALUES(event_date), details = VALUES(details)`,
+      [instrument.id, e.eventType, e.eventDate, e.details],
+    ]);
+    await runBatch(stmts);
+  });
+
+  await safe("earnings_trend", async () => {
+    const etrend = extractEarningsTrend(modules);
+    if (!etrend.length) return;
+    const stmts = etrend.map((t): [string, any[]] => [
+      `INSERT INTO earnings_trend (instrument_id, period_end, period_label, eps_estimate, eps_low, eps_high, eps_growth,
+         revenue_estimate, revenue_growth, n_analysts, eps_current, eps_7d_ago, eps_30d_ago, eps_60d_ago, eps_90d_ago,
+         up_7d, up_30d, down_7d, down_30d, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'yahoo')
+       ON DUPLICATE KEY UPDATE eps_estimate = VALUES(eps_estimate), eps_low = VALUES(eps_low), eps_high = VALUES(eps_high),
+         eps_growth = VALUES(eps_growth), revenue_estimate = VALUES(revenue_estimate), revenue_growth = VALUES(revenue_growth),
+         n_analysts = VALUES(n_analysts), eps_current = VALUES(eps_current), eps_7d_ago = VALUES(eps_7d_ago),
+         eps_30d_ago = VALUES(eps_30d_ago), eps_60d_ago = VALUES(eps_60d_ago), eps_90d_ago = VALUES(eps_90d_ago),
+         up_7d = VALUES(up_7d), up_30d = VALUES(up_30d), down_7d = VALUES(down_7d), down_30d = VALUES(down_30d)`,
+      [instrument.id, t.periodEnd, t.periodLabel, t.epsEstimate, t.epsLow, t.epsHigh, t.epsGrowth,
+       t.revenueEstimate, t.revenueGrowth, t.nAnalysts, t.epsCurrent, t.eps7dAgo, t.eps30dAgo, t.eps60dAgo, t.eps90dAgo,
+       t.up7d, t.up30d, t.down7d, t.down30d],
+    ]);
+    await runBatch(stmts);
+  });
+
+  await safe("recommendation_trend", async () => {
+    const rectrend = extractRecommendationTrend(modules);
+    if (!rectrend.length) return;
+    const stmts = rectrend.map((t): [string, any[]] => [
+      `INSERT INTO recommendation_trend (instrument_id, period_label, strong_buy, buy, hold, sell, strong_sell, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'yahoo')
+       ON DUPLICATE KEY UPDATE strong_buy = VALUES(strong_buy), buy = VALUES(buy), hold = VALUES(hold),
+         sell = VALUES(sell), strong_sell = VALUES(strong_sell)`,
+      [instrument.id, t.periodLabel, t.strongBuy, t.buy, t.hold, t.sell, t.strongSell],
+    ]);
+    await runBatch(stmts);
+  });
+
+  await safe("fund_holders", async () => {
+    const funds = extractFundHolders(modules);
+    if (!funds.length) return;
+    const stmts = funds.map((f): [string, any[]] => [
+      `INSERT INTO fund_holders (instrument_id, holding_date, owner_name, pct_held, position, value, pct_change, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'yahoo')
+       ON DUPLICATE KEY UPDATE pct_held = VALUES(pct_held), position = VALUES(position),
+         value = VALUES(value), pct_change = VALUES(pct_change)`,
+      [instrument.id, f.holdingDate, f.ownerName, f.pctHeld, f.position, f.value, f.pctChange],
+    ]);
+    await runBatch(stmts);
+  });
+}
+
+async function syncInvestingCalendar(instrument: InstrumentRow, nextEarningsDate: string | null): Promise<void> {
+  if (!nextEarningsDate) return;
+  await query(
+    `INSERT INTO company_events (instrument_id, event_type, event_date, details, source)
+     VALUES (?, 'EARNINGS', ?, NULL, 'investing')
+     ON DUPLICATE KEY UPDATE event_date = VALUES(event_date)`,
+    [instrument.id, nextEarningsDate]
+  );
+}
+
+/** Sync intraday bars into intraday_bars (Yahoo chart API). */
+async function syncIntradayBars(instrument: InstrumentRow, interval: IntradayInterval, days = 7): Promise<number> {
+  const today = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const bars: IntradayBar[] = await fetchYahooIntradayBars(instrument.yahoo_symbol ?? instrument.symbol, interval, from, today);
+  if (!bars.length) return 0;
+  const sql =
+    `INSERT INTO intraday_bars (instrument_id, ts, bar_interval, open, high, low, close, volume, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'yahoo')
+     ON DUPLICATE KEY UPDATE open = VALUES(open), high = VALUES(high), low = VALUES(low),
+       close = VALUES(close), volume = VALUES(volume)`;
+  const stmts = bars.map((b): [string, any[]] => [
+    sql,
+    [instrument.id, b.ts.replace("T", " ").replace("Z", ""), interval, b.open, b.high, b.low, b.close, b.volume],
+  ]);
+  for (let i = 0; i < stmts.length; i += 500) {
+    await runBatch(stmts.slice(i, i + 500));
+  }
+  return bars.length;
+}
+
 // ── full sync ───────────────────────────────────────────────────
 
-export async function syncOne(symbol: string, opts: { full: boolean }): Promise<{ symbol: string; bars: number; news: number; options: number }> {
+export async function syncOne(
+  symbol: string,
+  opts: { full: boolean; intraday?: IntradayInterval | null }
+): Promise<{ symbol: string; bars: number; news: number; options: number; intraday: number }> {
   const instrument = await ensureInstrument(symbol);
   const today = new Date().toISOString().slice(0, 10);
-  const result = { symbol, bars: 0, news: 0, options: 0 };
+  const result = { symbol, bars: 0, news: 0, options: 0, intraday: 0 };
 
   // 1. bars
   if (opts.full) {
@@ -211,6 +379,14 @@ export async function syncOne(symbol: string, opts: { full: boolean }): Promise<
         ],
       ]);
     if (holderStmts.length) await runBatch(holderStmts);
+
+    // data checklist: short interest / holder breakdown / insiders / analyst actions /
+    // forward events / earnings trend / recommendation trend / fund holders
+    try {
+      await syncYahooChecklist(instrument, modules);
+    } catch (e: any) {
+      console.warn(`[${symbol}] yahoo checklist failed: ${e.message}`);
+    }
   }
 
   // 3. investing snapshot (financials, ratios, dividends, forecast, profile, holders, earnings)
@@ -303,6 +479,9 @@ export async function syncOne(symbol: string, opts: { full: boolean }): Promise<
       [instrument.id, e.reportYear, e.reportMonth, e.reportDate, e.epsActual, e.epsForecast, e.revenueActual, e.revenueForecast],
     ]);
     if (earnStmts.length) await runBatch(earnStmts);
+
+    // forward calendar: next earnings date from investing
+    await syncInvestingCalendar(instrument, snapshot.nextEarningsDate);
   }
 
   // 4. financial statements from yahoo fundamentals (unauthenticated, structured)
@@ -350,6 +529,15 @@ export async function syncOne(symbol: string, opts: { full: boolean }): Promise<
     console.warn(`[${symbol}] options failed: ${e.message}`);
   }
 
+  // 6.5 intraday bars (optional)
+  if (opts.intraday) {
+    try {
+      result.intraday = await syncIntradayBars(instrument, opts.intraday);
+    } catch (e: any) {
+      console.warn(`[${symbol}] intraday sync failed: ${e.message}`);
+    }
+  }
+
   // 7. sync state
   const lastBarDate = await query<any[]>(
     "SELECT MAX(trade_date) AS d FROM daily_bars WHERE instrument_id = ? AND source = ?",
@@ -371,12 +559,12 @@ function barsSource(): string {
   return config.barsProvider === "investing" ? "investing" : "yahoo";
 }
 
-export async function syncAll(opts: { full: boolean }): Promise<void> {
+export async function syncAll(opts: { full: boolean; intraday?: IntradayInterval | null }): Promise<void> {
   const rows = await query<Array<{ symbol: string }>>("SELECT symbol FROM instruments ORDER BY symbol");
   for (const r of rows) {
     try {
       const res = await syncOne(r.symbol, opts);
-      console.log(`[${r.symbol}] bars=${res.bars} news=${res.news} options=${res.options}`);
+      console.log(`[${r.symbol}] bars=${res.bars} news=${res.news} options=${res.options} intraday=${res.intraday}`);
     } catch (e: any) {
       console.error(`[${r.symbol}] sync failed: ${e.message}`);
     }

@@ -170,3 +170,147 @@ CREATE TABLE IF NOT EXISTS sync_state (
   last_error TEXT NULL,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
+
+-- ============================================================
+-- Data checklist additions (Yahoo / Investing based)
+--   company_events        : 前瞻事件日历（财报/电话会/除息/派息）
+--   insider_transactions  : 内部人交易
+--   analyst_actions       : 分析师升级/降级与目标价调整
+--   earnings_trend        : 季度盈利预测趋势与修正
+--   recommendation_trend  : 分析师评级趋势（月度）
+--   fund_holders          : 基金持有人（mutual fund ownership）
+--   short_interest        : 空头持仓快照
+--   holder_breakdown      : 内部人/机构持股结构
+--   intraday_bars         : 分钟级行情
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS company_events (
+  instrument_id BIGINT NOT NULL,
+  event_type ENUM('EARNINGS','EARNINGS_CALL','EX_DIVIDEND','DIVIDEND_PAY') NOT NULL,
+  event_date DATE NOT NULL,
+  details VARCHAR(255) NULL,
+  source VARCHAR(16) NOT NULL DEFAULT 'yahoo',
+  PRIMARY KEY (instrument_id, event_type, source),
+  KEY idx_events_date (event_date)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS insider_transactions (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  instrument_id BIGINT NOT NULL,
+  transaction_date DATE NOT NULL,
+  insider_name VARCHAR(255) NOT NULL,
+  title VARCHAR(255) NULL,
+  transaction_text VARCHAR(255) NULL,
+  shares DECIMAL(20,2) NULL,
+  value DECIMAL(24,2) NULL,
+  ownership VARCHAR(8) NULL,
+  source VARCHAR(16) NOT NULL DEFAULT 'yahoo',
+  UNIQUE KEY uq_insider (instrument_id, transaction_date, insider_name, transaction_text),
+  KEY idx_insider_date (instrument_id, transaction_date)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS analyst_actions (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  instrument_id BIGINT NOT NULL,
+  action_date DATE NOT NULL,
+  firm VARCHAR(255) NULL,
+  from_grade VARCHAR(64) NULL,
+  to_grade VARCHAR(64) NULL,
+  action_type VARCHAR(64) NULL,
+  price_target_action VARCHAR(64) NULL,
+  current_price_target DECIMAL(14,4) NULL,
+  prior_price_target DECIMAL(14,4) NULL,
+  source VARCHAR(16) NOT NULL DEFAULT 'yahoo',
+  UNIQUE KEY uq_action (instrument_id, action_date, firm, to_grade, from_grade),
+  KEY idx_action_date (instrument_id, action_date)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS earnings_trend (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  instrument_id BIGINT NOT NULL,
+  period_end DATE NOT NULL,
+  period_label VARCHAR(8) NOT NULL,
+  eps_estimate DECIMAL(14,4) NULL,
+  eps_low DECIMAL(14,4) NULL,
+  eps_high DECIMAL(14,4) NULL,
+  eps_growth DECIMAL(10,4) NULL,
+  revenue_estimate DECIMAL(20,4) NULL,
+  revenue_growth DECIMAL(10,4) NULL,
+  n_analysts INT NULL,
+  eps_current DECIMAL(14,4) NULL,
+  eps_7d_ago DECIMAL(14,4) NULL,
+  eps_30d_ago DECIMAL(14,4) NULL,
+  eps_60d_ago DECIMAL(14,4) NULL,
+  eps_90d_ago DECIMAL(14,4) NULL,
+  up_7d INT NULL,
+  up_30d INT NULL,
+  down_7d INT NULL,
+  down_30d INT NULL,
+  source VARCHAR(16) NOT NULL DEFAULT 'yahoo',
+  UNIQUE KEY uq_earn_trend (instrument_id, period_end, source),
+  KEY idx_earn_trend_date (instrument_id, period_end)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS recommendation_trend (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  instrument_id BIGINT NOT NULL,
+  period_label VARCHAR(8) NOT NULL,
+  strong_buy INT NULL,
+  buy INT NULL,
+  hold INT NULL,
+  sell INT NULL,
+  strong_sell INT NULL,
+  source VARCHAR(16) NOT NULL DEFAULT 'yahoo',
+  UNIQUE KEY uq_rec_trend (instrument_id, period_label, source)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS fund_holders (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  instrument_id BIGINT NOT NULL,
+  holding_date DATE NOT NULL,
+  owner_name VARCHAR(255) NOT NULL,
+  pct_held DECIMAL(10,4) NULL,
+  position DECIMAL(20,2) NULL,
+  value DECIMAL(24,2) NULL,
+  pct_change DECIMAL(10,4) NULL,
+  source VARCHAR(16) NOT NULL DEFAULT 'yahoo',
+  UNIQUE KEY uq_fund_holder (instrument_id, holding_date, owner_name, source)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS short_interest (
+  instrument_id BIGINT NOT NULL,
+  as_of DATE NOT NULL,
+  shares_short DECIMAL(20,2) NULL,
+  shares_short_prior_month DECIMAL(20,2) NULL,
+  short_ratio DECIMAL(10,4) NULL,
+  short_percent_of_float DECIMAL(10,4) NULL,
+  shares_percent_shares_out DECIMAL(10,4) NULL,
+  short_date DATE NULL,
+  source VARCHAR(16) NOT NULL DEFAULT 'yahoo',
+  PRIMARY KEY (instrument_id, as_of, source)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS holder_breakdown (
+  instrument_id BIGINT NOT NULL,
+  as_of DATE NOT NULL,
+  insiders_percent DECIMAL(10,4) NULL,
+  institutions_percent DECIMAL(10,4) NULL,
+  institutions_float_percent DECIMAL(10,4) NULL,
+  institutions_count BIGINT NULL,
+  source VARCHAR(16) NOT NULL DEFAULT 'yahoo',
+  PRIMARY KEY (instrument_id, as_of, source)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS intraday_bars (
+  instrument_id BIGINT NOT NULL,
+  ts DATETIME NOT NULL,
+  bar_interval VARCHAR(8) NOT NULL,
+  open DECIMAL(18,4) NULL,
+  high DECIMAL(18,4) NULL,
+  low DECIMAL(18,4) NULL,
+  close DECIMAL(18,4) NULL,
+  volume BIGINT NULL,
+  source VARCHAR(16) NOT NULL DEFAULT 'yahoo',
+  PRIMARY KEY (instrument_id, bar_interval, ts),
+  KEY idx_intraday (instrument_id, bar_interval, ts)
+) ENGINE=InnoDB;

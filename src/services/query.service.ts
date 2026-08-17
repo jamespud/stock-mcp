@@ -226,3 +226,124 @@ export async function searchSymbols(q: string, limit = 20) {
     )
   );
 }
+
+// ── data-checklist queries ─────────────────────────────────────
+
+async function instOrNull(symbol: string) {
+  return getInstrument(symbol);
+}
+
+export async function getCompanyEvents(symbol: string, limit = 20) {
+  const inst = await instOrNull(symbol);
+  if (!inst) return null;
+  const rows = await query<any[]>(
+    `SELECT event_type, event_date, details, source FROM company_events
+     WHERE instrument_id = ?
+     ORDER BY event_date ASC LIMIT ${Math.max(1, Math.min(limit, 100))}`,
+    [inst.id]
+  );
+  return { symbol: inst.symbol, events: rows };
+}
+
+export async function getInsiderTransactions(symbol: string, limit = 20) {
+  const inst = await instOrNull(symbol);
+  if (!inst) return null;
+  const rows = await query<any[]>(
+    `SELECT transaction_date, insider_name, title, transaction_text, shares, value, ownership, source
+     FROM insider_transactions WHERE instrument_id = ?
+     ORDER BY transaction_date DESC LIMIT ${Math.max(1, Math.min(limit, 100))}`,
+    [inst.id]
+  );
+  return { symbol: inst.symbol, transactions: rows };
+}
+
+export async function getAnalystActions(symbol: string, limit = 20) {
+  const inst = await instOrNull(symbol);
+  if (!inst) return null;
+  const rows = await query<any[]>(
+    `SELECT action_date, firm, from_grade, to_grade, action_type, price_target_action, current_price_target, prior_price_target, source
+     FROM analyst_actions WHERE instrument_id = ?
+     ORDER BY action_date DESC LIMIT ${Math.max(1, Math.min(limit, 100))}`,
+    [inst.id]
+  );
+  return { symbol: inst.symbol, actions: rows };
+}
+
+export async function getEarningsTrend(symbol: string) {
+  const inst = await instOrNull(symbol);
+  if (!inst) return null;
+  const rows = await query<any[]>(
+    `SELECT period_end, period_label, eps_estimate, eps_low, eps_high, eps_growth, revenue_estimate,
+       revenue_growth, n_analysts, eps_current, eps_7d_ago, eps_30d_ago, eps_60d_ago, eps_90d_ago,
+       up_7d, up_30d, down_7d, down_30d, source
+     FROM earnings_trend WHERE instrument_id = ?
+     ORDER BY period_end ASC LIMIT 20`,
+    [inst.id]
+  );
+  return { symbol: inst.symbol, trend: rows };
+}
+
+export async function getRecommendationTrend(symbol: string) {
+  const inst = await instOrNull(symbol);
+  if (!inst) return null;
+  const rows = await query<any[]>(
+    `SELECT period_label, strong_buy, buy, hold, sell, strong_sell, source
+     FROM recommendation_trend WHERE instrument_id = ?
+     ORDER BY period_label ASC LIMIT 40`,
+    [inst.id]
+  );
+  return { symbol: inst.symbol, trend: rows };
+}
+
+export async function getFundHolders(symbol: string, limit = 20) {
+  const inst = await instOrNull(symbol);
+  if (!inst) return null;
+  const rows = await query<any[]>(
+    `SELECT holding_date, owner_name, pct_held, position, value, pct_change, source
+     FROM fund_holders WHERE instrument_id = ?
+     ORDER BY pct_held DESC LIMIT ${Math.max(1, Math.min(limit, 100))}`,
+    [inst.id]
+  );
+  return { symbol: inst.symbol, holders: rows };
+}
+
+export async function getShortInterest(symbol: string) {
+  const inst = await instOrNull(symbol);
+  if (!inst) return null;
+  const rows = await query<any[]>(
+    `SELECT as_of, shares_short, shares_short_prior_month, short_ratio, short_percent_of_float,
+       shares_percent_shares_out, short_date, source
+     FROM short_interest WHERE instrument_id = ?
+     ORDER BY as_of DESC LIMIT 10`,
+    [inst.id]
+  );
+  return { symbol: inst.symbol, shortInterest: rows };
+}
+
+export async function getHolderBreakdown(symbol: string) {
+  const inst = await instOrNull(symbol);
+  if (!inst) return null;
+  const rows = await query<any[]>(
+    `SELECT as_of, insiders_percent, institutions_percent, institutions_float_percent, institutions_count, source
+     FROM holder_breakdown WHERE instrument_id = ?
+     ORDER BY as_of DESC LIMIT 10`,
+    [inst.id]
+  );
+  return { symbol: inst.symbol, breakdown: rows };
+}
+
+export async function getIntradayBars(symbol: string, interval: string, from?: string, to?: string, limit = 5000) {
+  const inst = await instOrNull(symbol);
+  if (!inst) return null;
+  const cond = ["instrument_id = ?", "bar_interval = ?"];
+  const params: any[] = [inst.id, interval];
+  if (from) { cond.push("ts >= ?"); params.push(from + " 00:00:00"); }
+  if (to) { cond.push("ts <= ?"); params.push(to + " 23:59:59"); }
+  const rows = await query<any[]>(
+    `SELECT ts, bar_interval, open, high, low, close, volume, source
+     FROM intraday_bars WHERE ${cond.join(" AND ")}
+     ORDER BY ts ASC LIMIT ${Math.max(1, Math.min(limit, 20000))}`,
+    params
+  );
+  return { symbol: inst.symbol, interval, bars: rows };
+}

@@ -1,5 +1,5 @@
 import { httpFetch, httpJson, httpText, HttpError } from "./http.js";
-import type { Bar, Dividend, FinancialField, NewsItem, OptionChain, OptionQuote, RatioValue } from "./types.js";
+import type { AnalystAction, Bar, CompanyEvent, Dividend, EarningsTrendRow, FinancialField, FundHolder, HolderBreakdown, InsiderTransaction, IntradayBar, NewsItem, OptionChain, OptionQuote, RatioValue, RecommendationTrendRow, ShortInterest } from "./types.js";
 
 const CHART_HOST = "https://query1.finance.yahoo.com";
 const COOKIE_URL = "https://fc.yahoo.com/";
@@ -376,4 +376,221 @@ export function extractDividendsFromSummary(modules: Record<string, any>): Divid
     });
   }
   return out;
+}
+
+// ── data-checklist extraction (quoteSummary modules) ───────────
+
+function unixToDate(u: any): string | null {
+  const n = num(u);
+  if (n == null) return null;
+  return new Date(n * 1000).toISOString().slice(0, 10);
+}
+
+export function extractShortInterest(modules: Record<string, any>): ShortInterest | null {
+  const dks = modules.defaultKeyStatistics ?? {};
+  const asOf = new Date().toISOString().slice(0, 10);
+  const sharesShort = num(dks.sharesShort);
+  if (sharesShort == null) return null;
+  return {
+    asOf,
+    sharesShort,
+    sharesShortPriorMonth: num(dks.sharesShortPriorMonth),
+    shortRatio: num(dks.shortRatio),
+    shortPercentOfFloat: num(dks.shortPercentOfFloat),
+    sharesPercentSharesOut: num(dks.sharesPercentSharesOut),
+    shortDate: unixToDate(dks.dateShortInterest),
+    source: "yahoo",
+  };
+}
+
+export function extractInsiderTransactions(modules: Record<string, any>): InsiderTransaction[] {
+  const out: InsiderTransaction[] = [];
+  for (const t of modules.insiderTransactions?.transactions ?? []) {
+    const d = unixToDate(t.startDate?.raw ?? t.startDate);
+    if (!d) continue;
+    out.push({
+      transactionDate: d,
+      insiderName: t.filerName ?? "",
+      title: t.filerRelation ?? null,
+      transactionText: t.transactionText ?? null,
+      shares: num(t.shares),
+      value: num(t.value),
+      ownership: t.ownership ?? null,
+      source: "yahoo",
+    });
+  }
+  return out;
+}
+
+export function extractUpgradeDowngrades(modules: Record<string, any>): AnalystAction[] {
+  const out: AnalystAction[] = [];
+  for (const h of modules.upgradeDowngradeHistory?.history ?? []) {
+    const d = h.epochGradeDate ? new Date(h.epochGradeDate * 1000).toISOString().slice(0, 10) : null;
+    if (!d) continue;
+    out.push({
+      actionDate: d,
+      firm: h.firm ?? null,
+      fromGrade: h.fromGrade || null,
+      toGrade: h.toGrade || null,
+      actionType: h.action || null,
+      priceTargetAction: h.priceTargetAction || null,
+      currentPriceTarget: num(h.currentPriceTarget),
+      priorPriceTarget: num(h.priorPriceTarget),
+      source: "yahoo",
+    });
+  }
+  return out;
+}
+
+export function extractCalendarEvents(modules: Record<string, any>): CompanyEvent[] {
+  const out: CompanyEvent[] = [];
+  const ce = modules.calendarEvents ?? {};
+  const earn = ce.earnings ?? {};
+  const earnDates: number[] = Array.isArray(earn.earningsDate) ? earn.earningsDate : [];
+  const callDates: number[] = Array.isArray(earn.earningsCallDate) ? earn.earningsCallDate : [];
+  const nextEarn = earnDates[0] ?? callDates[0];
+  if (nextEarn != null) {
+    const d = new Date(nextEarn * 1000).toISOString().slice(0, 10);
+    out.push({ eventType: "EARNINGS", eventDate: d, details: earn.isEarningsDateEstimate ? "estimate" : null, source: "yahoo" });
+  }
+  if (callDates[0] != null && nextEarn == null) {
+    const d = new Date(callDates[0] * 1000).toISOString().slice(0, 10);
+    out.push({ eventType: "EARNINGS_CALL", eventDate: d, details: null, source: "yahoo" });
+  }
+  if (ce.exDividendDate != null) {
+    const d = new Date(ce.exDividendDate * 1000).toISOString().slice(0, 10);
+    out.push({ eventType: "EX_DIVIDEND", eventDate: d, details: null, source: "yahoo" });
+  }
+  if (ce.dividendDate != null) {
+    const d = new Date(ce.dividendDate * 1000).toISOString().slice(0, 10);
+    out.push({ eventType: "DIVIDEND_PAY", eventDate: d, details: null, source: "yahoo" });
+  }
+  return out;
+}
+
+export function extractEarningsTrend(modules: Record<string, any>): EarningsTrendRow[] {
+  const out: EarningsTrendRow[] = [];
+  for (const t of modules.earningsTrend?.trend ?? []) {
+    const endDate = String(t.endDate ?? "").slice(0, 10);
+    if (!endDate) continue;
+    const ee = t.earningsEstimate ?? {};
+    const re = t.revenueEstimate ?? {};
+    const et = t.epsTrend ?? {};
+    const er = t.epsRevisions ?? {};
+    out.push({
+      periodEnd: endDate,
+      periodLabel: t.period ?? "",
+      epsEstimate: num(ee.avg),
+      epsLow: num(ee.low),
+      epsHigh: num(ee.high),
+      epsGrowth: num(ee.growth),
+      revenueEstimate: num(re.avg),
+      revenueGrowth: num(re.growth),
+      nAnalysts: num(ee.numberOfAnalysts),
+      epsCurrent: num(et.current),
+      eps7dAgo: num(et["7daysAgo"]),
+      eps30dAgo: num(et["30daysAgo"]),
+      eps60dAgo: num(et["60daysAgo"]),
+      eps90dAgo: num(et["90daysAgo"]),
+      up7d: num(er.upLast7days),
+      up30d: num(er.upLast30days),
+      down7d: num(er.downLast7Days ?? er.downLast7days),
+      down30d: num(er.downLast30days),
+      source: "yahoo",
+    });
+  }
+  return out;
+}
+
+export function extractRecommendationTrend(modules: Record<string, any>): RecommendationTrendRow[] {
+  const out: RecommendationTrendRow[] = [];
+  for (const t of modules.recommendationTrend?.trend ?? []) {
+    out.push({
+      periodLabel: t.period ?? "",
+      strongBuy: num(t.strongBuy),
+      buy: num(t.buy),
+      hold: num(t.hold),
+      sell: num(t.sell),
+      strongSell: num(t.strongSell),
+      source: "yahoo",
+    });
+  }
+  return out;
+}
+
+export function extractFundHolders(modules: Record<string, any>): FundHolder[] {
+  const out: FundHolder[] = [];
+  for (const o of modules.fundOwnership?.ownershipList ?? []) {
+    const d = unixToDate(o.reportDate?.raw ?? o.reportDate);
+    if (!d) continue;
+    const pct = num(o.pctHeld);
+    out.push({
+      holdingDate: d,
+      ownerName: o.organization ?? "",
+      pctHeld: pct != null ? pct * 100 : null,
+      position: num(o.position),
+      value: num(o.value),
+      pctChange: num(o.pctChange) != null && num(o.pctChange) !== null ? (num(o.pctChange) as number) * 100 : null,
+      source: "yahoo",
+    });
+  }
+  return out;
+}
+
+export function extractHolderBreakdown(modules: Record<string, any>): HolderBreakdown | null {
+  const mhb = modules.majorHoldersBreakdown ?? {};
+  if (num(mhb.institutionsCount) == null && num(mhb.insidersPercentHeld) == null) return null;
+  return {
+    asOf: new Date().toISOString().slice(0, 10),
+    insidersPercent: num(mhb.insidersPercentHeld) != null ? (num(mhb.insidersPercentHeld) as number) * 100 : null,
+    institutionsPercent: num(mhb.institutionsPercentHeld) != null ? (num(mhb.institutionsPercentHeld) as number) * 100 : null,
+    institutionsFloatPercent: num(mhb.institutionsFloatPercentHeld) != null ? (num(mhb.institutionsFloatPercentHeld) as number) * 100 : null,
+    institutionsCount: num(mhb.institutionsCount),
+    source: "yahoo",
+  };
+}
+
+/** Intraday bars with full timestamps (1m/5m/15m/30m/60m), on-demand from Yahoo chart API. */
+export async function fetchYahooIntradayBars(
+  symbol: string,
+  interval: "1m" | "5m" | "15m" | "30m" | "60m",
+  from?: string,
+  to?: string
+): Promise<IntradayBar[]> {
+  const secPerPoint = SECONDS_PER_POINT[interval];
+  const end = to ? Math.floor(new Date(to + "T23:59:59Z").getTime() / 1000) : Math.floor(Date.now() / 1000);
+  const start = from
+    ? Math.floor(new Date(from + "T00:00:00Z").getTime() / 1000)
+    : end - 7 * 24 * 3600; // default: last 7 days
+  const out: IntradayBar[] = [];
+  let cur = start;
+  const CHUNK = 1500;
+  while (cur < end) {
+    const chunkEnd = Math.min(cur + CHUNK * secPerPoint, end);
+    const url = `${CHART_HOST}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&period1=${cur}&period2=${chunkEnd}&includePrePost=false`;
+    const resp = await httpJson<any>(url);
+    if (resp.chart?.error) throw new Error(`yahoo chart: ${resp.chart.error.description}`);
+    const res = resp.chart?.result?.[0];
+    if (!res) break;
+    const q = res.indicators?.quote?.[0] ?? {};
+    for (let i = 0; i < (res.timestamp?.length ?? 0); i++) {
+      if (q.close?.[i] == null) continue;
+      out.push({
+        ts: new Date(res.timestamp[i] * 1000).toISOString().slice(0, 19) + "Z",
+        open: q.open?.[i] ?? null,
+        high: q.high?.[i] ?? null,
+        low: q.low?.[i] ?? null,
+        close: q.close[i] ?? null,
+        volume: q.volume?.[i] ?? null,
+        source: "yahoo",
+      });
+    }
+    const lastTs = res.timestamp?.[res.timestamp.length - 1];
+    if (!lastTs || lastTs <= cur) break;
+    cur = lastTs + secPerPoint;
+  }
+  // dedupe by ts (keep last)
+  const byTs = new Map<string, IntradayBar>();
+  for (const b of out) byTs.set(b.ts, b);
+  return [...byTs.values()];
 }
