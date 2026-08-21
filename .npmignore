@@ -1,0 +1,11 @@
+# The published package ships the compiled dist/ and Go sidecar bin/gqlproxy.
+# dist/ and bin/ are intentionally NOT ignored here, so this file overrides the
+# .gitignore rules that would otherwise keep them out of the npm tarball.
+
+# Dev-only source, tests, and infrastructure:
+src/
+scripts/
+deploy/
+.cache/
+.env
+*.tsbuildinfo

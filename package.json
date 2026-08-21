@@ -7,6 +7,31 @@
   "bin": {
     "yahoo-stock-mcp": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "bin",
+    "cmd/gqlproxy",
+    "db",
+    "README.md",
+    "LICENSE",
+    ".env.example"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jamespud/yahoo-stock-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "stock",
+    "yahoo-finance",
+    "investing",
+    "mysql"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "server": "node dist/cli.js server",
@@ -19,7 +44,9 @@
     "test": "npm run test:db && npm run test:mcp",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build:sidecar": "cd cmd/gqlproxy && go build -o ../../bin/gqlproxy .",
-    "build:all": "npm run build && npm run build:sidecar"
+    "build:all": "npm run build && npm run build:sidecar",
+    "prepack": "npm run build:all",
+    "prepublishOnly": "npm run build:all"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

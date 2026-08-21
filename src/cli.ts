@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { closeDb, initSchema } from "./db.js";
 import { syncAll, syncOne, syncSectors, type IntradayInterval } from "./services/sync.service.js";
 import { startMcpServer } from "./mcp/server.js";

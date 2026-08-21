@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
 import { config } from "./config.js";
 
 let pool: mysql.Pool | null = null;
+
+/** Package root when compiled to dist/db.js (``..`` from dist/). */
+const PACKAGE_ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 export function getPool(): mysql.Pool {
   if (!pool) {
@@ -30,7 +34,7 @@ export async function query<T = any>(sql: string, params: any[] = []): Promise<T
 }
 
 export async function initSchema(): Promise<void> {
-  const schemaPath = resolve(process.cwd(), "db", "schema.sql");
+  const schemaPath = resolve(PACKAGE_ROOT, "db", "schema.sql");
   const sql = readFileSync(schemaPath, "utf8");
   const conn = await getPool().getConnection();
   try {
