@@ -158,7 +158,7 @@ async function main() {
     });
     assert.ok(init.result, `initialize failed: ${JSON.stringify(init)}`);
     assert.equal(init.result.protocolVersion, "2025-11-25");
-    assert.equal(init.result.serverInfo.name, "stock-mcp");
+    assert.equal(init.result.serverInfo.name, "yahoo-stock-mcp");
     assert.ok(init.result.capabilities.tools, "server should declare tools capability");
 
     probe.notify("notifications/initialized");

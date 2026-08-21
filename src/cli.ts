@@ -53,7 +53,7 @@ async function main() {
         console.log(`synced ${symbol}: bars=${r.bars} news=${r.news} options=${r.options} intraday=${r.intraday}`);
       } else {
         console.error(
-          "usage: stock-mcp sync --symbol NVDA [--full|--incremental] [--intraday 15m] | sync --all [--full] [--intraday 15m] | sync --sectors [--no-members]"
+          "usage: yahoo-stock-mcp sync --symbol NVDA [--full|--incremental] [--intraday 15m] | sync --all [--full] [--intraday 15m] | sync --sectors [--no-members]"
         );
         process.exitCode = 1;
       }

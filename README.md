@@ -1,4 +1,4 @@
-# stock-mcp
+# yahoo-stock-mcp
 
 MCP server（TypeScript / Node.js）通过 **Yahoo Finance** 和 **Investing.com（GraphQL + TVC）** 获取股票全量信息，持久化到 **外部 MySQL**（通过 `DATABASE_URL` 连接串配置，不随 server 内置），按标的代码查询。
 
@@ -109,9 +109,9 @@ npm test           # 两者一起
 ```json
 {
   "mcpServers": {
-    "stock-mcp": {
+    "yahoo-stock-mcp": {
       "command": "node",
-      "args": ["/path/to/stock-mcp/dist/cli.js", "server"]
+      "args": ["/path/to/yahoo-stock-mcp/dist/cli.js", "server"]
     }
   }
 }

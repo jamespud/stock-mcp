@@ -7,7 +7,7 @@ import * as q from "../services/query.service.js";
 import { closeDb } from "../db.js";
 
 const server = new McpServer({
-  name: "stock-mcp",
+  name: "yahoo-stock-mcp",
   version: "0.1.0",
 });
 

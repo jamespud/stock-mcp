@@ -3,7 +3,7 @@
 services:
   mysql:
     image: mysql:8.4
-    container_name: stock-mcp-mysql
+    container_name: yahoo-stock-mcp-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root123
       MYSQL_DATABASE: stock_mcp
