@@ -2,127 +2,129 @@
 
 [![npm version](https://img.shields.io/npm/v/yahoo-stock-mcp.svg)](https://www.npmjs.com/package/yahoo-stock-mcp)
 
-MCP server（TypeScript / Node.js）通过 **Yahoo Finance** 和 **Investing.com（GraphQL + TVC）** 获取股票全量信息，持久化到 **外部 MySQL**（通过 `DATABASE_URL` 连接串配置，不随 server 内置），按标的代码查询。
+[English](./README.md) | [中文](./README.zh-CN.md)
 
-架构上 MCP server 保持轻量：它只是一个薄查询层 + 同步触发器，数据库是完全外部的依赖。
+An MCP server (TypeScript / Node.js) that pulls comprehensive market data for stocks via **Yahoo Finance** and **Investing.com (GraphQL + TVC)**, persists it to an **external MySQL** (configured via a `DATABASE_URL` connection string, not bundled with the server), and queries it by ticker.
 
-## 安装
+Architecturally the MCP server stays lightweight: it is only a thin query layer plus a sync trigger, while the database is a fully external dependency.
+
+## Install
 
 ```bash
 npm install -g yahoo-stock-mcp
 ```
 
-需要 Node.js >= 20 与一个外部 MySQL（见下方 `.env` 配置）。
+Requires Node.js >= 20 and an external MySQL (see the `.env` config below).
 
-## 快速开始（npm 全局安装）
+## Quick start (npm global install)
 
-包内已自带编译好的 `dist/` 与 Go sidecar `bin/gqlproxy`，无需再构建，直接用 `yahoo-stock-mcp` 命令：
+The package already ships the compiled `dist/` and the Go sidecar `bin/gqlproxy`, so no build step is needed — just use the `yahoo-stock-mcp` command:
 
 ```bash
 
-# 0. 配置外部 MySQL 连接（.env）
+# 0. Configure the external MySQL connection (.env)
 #    DATABASE_URL=mysql://user:pass@host:3306/stock_mcp
-#    本地临时开发库可用 deploy/docker-compose.mysql.yml 起一个：
+#    For a local dev database you can spin one up with deploy/docker-compose.mysql.yml:
 #    docker compose -f deploy/docker-compose.mysql.yml up -d
 
-# 1. 对配置的数据库初始化表结构
+# 1. Initialise the schema in the configured database
 yahoo-stock-mcp db:init
 
-# 2. 全量同步一只股票（从 2000-01-01 开始拉历史 + 全部基本面）
+# 2. Full sync of one stock (pull history from 2000-01-01 + all fundamentals)
 yahoo-stock-mcp sync --symbol NVDA --full
 
-# 之后增量同步（只拉新增数据）
+# Incremental sync afterwards (only new data)
 yahoo-stock-mcp sync --symbol NVDA
 
-# 增量同步并同时拉取 15 分钟线（1m/5m/15m/30m/60m）
+# Incremental sync and also pull 15m bars (1m/5m/15m/30m/60m)
 yahoo-stock-mcp sync --symbol NVDA --intraday 15m
 
-# 同步所有已入库标的
+# Sync every stored symbol
 yahoo-stock-mcp sync --all --full
 
-# 同步全部 GICS 板块 ETF 行情 + 成分股（板块轮动数据）
+# Sync all GICS sector ETFs + constituents (sector rotation data)
 yahoo-stock-mcp sync --sectors
 
-# 3. 启动 MCP server（stdio）
+# 3. Start the MCP server (stdio)
 yahoo-stock-mcp server
 ```
 
-## 从源码运行（开发 / 贡献）
+## Run from source (development / contribution)
 
 ```bash
 npm install
 npm run build:all   # TypeScript + Go sidecar
-npm run server      # stdio；其余命令用 npm run sync -- ... 或 npm run dev
+npm run server      # stdio; use npm run sync -- ... or npm run dev for other commands
 ```
 
-## 测试
+## Tests
 
 ```bash
-# 需要本地 MySQL（默认 127.0.0.1:3306，见 deploy/docker-compose.mysql.yml）且已初始化表结构
-npm run test:db    # 查询层：覆盖全部查询函数、LIMIT 绑定回归、边界参数
-npm run test:mcp   # 协议层：initialize/tools/list/tools/call 全工具端到端 + stdin 关闭退出
-npm test           # 两者一起
+# Requires a local MySQL (default 127.0.0.1:3306, see deploy/docker-compose.mysql.yml) with the schema initialised
+npm run test:db    # query layer: covers all query functions, LIMIT binding regression, edge params
+npm run test:mcp   # protocol layer: initialize/tools/list/tools/call end-to-end + stdin close exit
+npm test           # both
 ```
 
-测试使用独立的 `ZZTEST` 标的，跑完自动清理，不会动已有数据。
+Tests use a dedicated `ZZTEST` symbol and clean up automatically, so they never touch real data.
 
-## MCP 工具
+## MCP tools
 
-| 工具 | 说明 |
+| Tool | Description |
 |---|---|
-| `sync_stock` | 全量/增量同步一只股票到 MySQL |
-| `search_symbol` | 搜索已入库标的 |
-| `get_quote` | 最新行情 + 关键指标 |
-| `get_bars` | 历史 K 线（1d/1wk/1mo） |
-| `get_profile` | 公司资料 |
-| `get_financials` | 三张财务报表 |
-| `get_ratios` | 估值/财务比率 |
-| `get_dividends` | 分红历史与摘要 |
-| `get_analyst_forecast` | 分析师共识与目标价 |
-| `get_earnings` | 盈利历史与预测 |
-| `get_holders` | 机构持有人 |
-| `get_news` | 新闻 |
-| `get_options` | 期权链快照（同步入库后查询） |
-| `get_option_quote` | 实时拉取期权行情（Yahoo 直连、按需、不依赖本地库）：标的报价 + 可选到期日/行权价/方向过滤 |
-| `get_company_events` | 前瞻事件日历：下次财报日 / 电话会 / 除息日 / 派息日（Yahoo calendarEvents + Investing next_release_date） |
-| `get_insider_transactions` | 内部人交易：高管/董事买卖、股数、金额（Yahoo insiderTransactions） |
-| `get_analyst_actions` | 分析师升级/降级与目标价调整（Yahoo upgradeDowngradeHistory） |
-| `get_earnings_trend` | 季度盈利预测趋势：EPS/营收预估、增速、近 7/30/60/90 天修正（Yahoo earningsTrend） |
-| `get_recommendation_trend` | 分析师评级趋势（月度 strong buy/buy/hold/sell/strong sell） |
-| `get_fund_holders` | 基金持有人（mutual fund ownership，Yahoo fundOwnership） |
-| `get_short_interest` | 空头持仓快照：做空股数、short ratio、占流通盘比例（Yahoo defaultKeyStatistics） |
-| `get_holder_breakdown` | 持股结构：内部人/机构占比、机构占流通盘、机构数（Yahoo majorHoldersBreakdown） |
-| `get_intraday_bars` | 分钟级 K 线（1m/5m/15m/30m/60m，同步入库后查询） |
-| `list_sectors` | 板块目录：11 个 GICS 板块 + SPY 基准，映射到 SPDR 板块 ETF |
-| `get_sector_performance` | 板块轮动视图：各板块最新价 + 1d/5d/20d 涨跌幅排名 + SPY 基准对比 |
-| `get_sector_members` | 板块成分股（板块 ETF topHoldings，含权重） |
-| `sync_sectors` | 同步全部板块 ETF 行情（约 30 天 K 线）与成分股 |
+| `sync_stock` | Full/incremental sync of one stock to MySQL |
+| `search_symbol` | Search stored instruments by symbol/name |
+| `get_quote` | Latest quote + key metrics |
+| `get_bars` | Historical candles (1d/1wk/1mo) |
+| `get_profile` | Company profile |
+| `get_financials` | The three financial statements |
+| `get_ratios` | Valuation / financial ratios |
+| `get_dividends` | Dividend history & summary |
+| `get_analyst_forecast` | Analyst consensus & price target |
+| `get_earnings` | Earnings history & estimates |
+| `get_holders` | Institutional holders |
+| `get_news` | News |
+| `get_options` | Option chain snapshot (queried after being synced to DB) |
+| `get_option_quote` | Live option quotes straight from Yahoo (on demand, no local DB needed): underlying quote + optional expiry/strike/direction filters |
+| `get_company_events` | Forward-looking event calendar: next earnings / call / ex-dividend / dividend dates (Yahoo `calendarEvents` + Investing `next_release_date`) |
+| `get_insider_transactions` | Insider trading: executive/director buys & sells, shares, amounts (Yahoo `insiderTransactions`) |
+| `get_analyst_actions` | Analyst upgrades/downgrades & target-price changes (Yahoo `upgradeDowngradeHistory`) |
+| `get_earnings_trend` | Quarterly earnings estimate trend: EPS/revenue estimates, growth, 7/30/60/90-day revisions (Yahoo `earningsTrend`) |
+| `get_recommendation_trend` | Analyst rating trend (monthly strong buy/buy/hold/sell/strong sell) |
+| `get_fund_holders` | Mutual fund ownership (Yahoo `fundOwnership`) |
+| `get_short_interest` | Short-interest snapshot: shares short, short ratio, % of float (Yahoo `defaultKeyStatistics`) |
+| `get_holder_breakdown` | Ownership breakdown: insider/institutional %, institutional float, institutional count (Yahoo `majorHoldersBreakdown`) |
+| `get_intraday_bars` | Minute-level bars (1m/5m/15m/30m/60m, queried after being synced to DB) |
+| `list_sectors` | Sector catalog: the 11 GICS sectors + SPY benchmark, mapped to SPDR sector ETFs |
+| `get_sector_performance` | Sector rotation view: each sector's latest price + 1d/5d/20d change ranking vs SPY benchmark |
+| `get_sector_members` | Sector constituents (sector ETF `topHoldings`, incl. weights) |
+| `sync_sectors` | Sync all sector ETF quotes (~30 days of bars) and constituents |
 
-## 数据源
+## Data sources
 
-- **Yahoo Finance**：K 线（v8 chart）、quoteSummary（需 cookie+crumb）、期权（v7）、新闻（v1 search）、财务（fundamentals-timeseries，免认证）
-- **Investing.com**：GraphQL `gql.api.investing.com/graphql`（行情/三表/比率/分红/预测/盈利/公司资料/高管/持有人，免认证）、TVC K 线（carrier token）
+- **Yahoo Finance**: bars (v8 chart), quoteSummary (needs cookie+crumb), options (v7), news (v1 search), fundamentals (fundamentals-timeseries, no auth)
+- **Investing.com**: GraphQL `gql.api.investing.com/graphql` (quotes/statements/ratios/dividends/estimates/earnings/profile/executives/holders, no auth), TVC bars (carrier token)
 
-## 数据清单（Data Checklist）
+## Data checklist
 
-面向"关注行情、提前布局"场景，在原有个股基本面基础上新增以下数据维度，全部由 **Yahoo quoteSummary / Investing GraphQL** 现有接口获取：
+For the "watch the market, position early" use case, the following dimensions are added on top of the per-stock fundamentals, all fetched from existing **Yahoo quoteSummary / Investing GraphQL** endpoints:
 
-| 维度 | 表 | 数据源 |
+| Dimension | Table | Source |
 |---|---|---|
-| 前瞻事件日历 | `company_events` | Yahoo `calendarEvents` + Investing `next_release_date`（下次财报/除息/派息） |
-| 内部人交易 | `insider_transactions` | Yahoo `insiderTransactions` |
-| 分析师动作 | `analyst_actions` | Yahoo `upgradeDowngradeHistory`（升级/降级/目标价调整） |
-| 盈利预测趋势 | `earnings_trend` | Yahoo `earningsTrend`（季度 EPS/营收预估 + 近 7/30/60/90 天修正） |
-| 评级趋势 | `recommendation_trend` | Yahoo `recommendationTrend`（月度评级分布） |
-| 基金持有人 | `fund_holders` | Yahoo `fundOwnership` |
-| 空头持仓 | `short_interest` | Yahoo `defaultKeyStatistics`（sharesShort/shortRatio/占流通盘） |
-| 持股结构 | `holder_breakdown` | Yahoo `majorHoldersBreakdown`（内部人/机构占比） |
-| 分钟线 | `intraday_bars` | Yahoo chart v8（1m/5m/15m/30m/60m） |
-| 板块目录与轮动 | `sectors` / `sector_members` | GICS 11 板块 + SPY 基准，板块 ETF（XLC..XLU/SPY）行情 + `topHoldings` 成分股权重 |
+| Forward-looking event calendar | `company_events` | Yahoo `calendarEvents` + Investing `next_release_date` (next earnings/dividend) |
+| Insider transactions | `insider_transactions` | Yahoo `insiderTransactions` |
+| Analyst actions | `analyst_actions` | Yahoo `upgradeDowngradeHistory` (upgrades/downgrades/target changes) |
+| Earnings estimate trend | `earnings_trend` | Yahoo `earningsTrend` (quarterly EPS/revenue estimate + 7/30/60/90-day revisions) |
+| Recommendation trend | `recommendation_trend` | Yahoo `recommendationTrend` (monthly rating distribution) |
+| Fund holders | `fund_holders` | Yahoo `fundOwnership` |
+| Short interest | `short_interest` | Yahoo `defaultKeyStatistics` (sharesShort/shortRatio/% of float) |
+| Holder breakdown | `holder_breakdown` | Yahoo `majorHoldersBreakdown` (insider/institutional %) |
+| Minute bars | `intraday_bars` | Yahoo chart v8 (1m/5m/15m/30m/60m) |
+| Sector catalog & rotation | `sectors` / `sector_members` | GICS 11 sectors + SPY benchmark, sector ETF (XLC..XLU/SPY) quotes + `topHoldings` constituent weights |
 
-> 指数 / ETF / 跨资产（如 `^GSPC`、`^VIX`、`SPY`、`TLT`）可直接当作标的同步：Yahoo 原生支持指数行情，Investing 侧失败会被自动跳过，不影响 Yahoo 数据落库。
+> Indices / ETFs / cross-assets (e.g. `^GSPC`, `^VIX`, `SPY`, `TLT`) can be synced directly as symbols: Yahoo natively serves index quotes, and any Investing side failures are skipped automatically, so Yahoo data still lands in the DB.
 
-## 客户端接入示例（Claude Desktop / Cursor / Codex）
+## Client integration (Claude Desktop / Cursor / Codex)
 
 ```json
 {
@@ -135,42 +137,42 @@ npm test           # 两者一起
 }
 ```
 
-> `command` 依赖 `yahoo-stock-mcp` 在 PATH 上（npm 全局安装后即满足）；若未全局安装，也可改用源码路径 `node /path/to/yahoo-stock-mcp/dist/cli.js server`。
+> `command` relies on `yahoo-stock-mcp` being on PATH (satisfied after a global npm install); if not globally installed, use the source path instead: `node /path/to/yahoo-stock-mcp/dist/cli.js server`.
 
-## 说明
+## Notes
 
-- 全量同步：从 `BARS_START_DATE`（默认 2000-01-01）拉全部日 K + 全部基本面 + 期权快照 + 新闻 + 数据清单（事件/内部人/分析师/盈利趋势/空头/基金等）。
-- 增量同步：按 `sync_state.last_bar_date` 只拉新 K 线，并刷新行情、比率、预测、新闻、期权快照与数据清单。
-- 分钟线：`--intraday <1m|5m|15m|30m|60m>` 拉取最近 7 天分钟 K 到 `intraday_bars`（幂等 upsert）。
-- 板块：`sync --sectors` 一键同步 11 个 GICS 板块 ETF（XLC..XLU）+ SPY 基准的行情与 `topHoldings` 成分股，`get_sector_performance` 输出板块轮动排名。
-- 期权行情：`get_options` 读取同步入库的快照；`get_option_quote` 每次直接从 Yahoo 按需拉取最新报价（含标的现价、可选到期日、行权价、方向过滤），无需先执行同步。
-- 所有写入均为幂等 upsert（`INSERT ... ON DUPLICATE KEY UPDATE`），可重复执行。
-- 限流已内置（默认 300ms/请求），Yahoo crumb 缓存 25 分钟，TVC token 缓存 25 分钟。
+- Full sync: pulls all daily bars from `BARS_START_DATE` (default `2000-01-01`) + all fundamentals + an options snapshot + news + the data checklist (events/insiders/analysts/earnings trend/short interest/funds, etc.).
+- Incremental sync: only pulls new bars since `sync_state.last_bar_date`, and refreshes quotes, ratios, estimates, news, the options snapshot and the data checklist.
+- Minute bars: `--intraday <1m|5m|15m|30m|60m>` pulls the last 7 days of minute bars into `intraday_bars` (idempotent upsert).
+- Sectors: `sync --sectors` syncs the 11 GICS sector ETFs (XLC..XLU) + SPY benchmark quotes and `topHoldings` constituents in one go; `get_sector_performance` returns the rotation ranking.
+- Options: `get_options` reads the snapshot synced to the DB; `get_option_quote` fetches the latest quotes directly from Yahoo on demand (incl. underlying price, optional expiry, strike, and direction filters) — no prior sync required.
+- All writes are idempotent upserts (`INSERT ... ON DUPLICATE KEY UPDATE`) and can be re-run safely.
+- Rate limiting is built in (default 300ms/request); Yahoo crumb cache 25 min, TVC token cache 25 min.
 
-## 关于 investing.com 的 TLS 拦截
+## About investing.com's TLS interception
 
-investing.com 通过 Cloudflare **TLS 指纹**拦截 Node.js 的请求（HTTP 403），Go 客户端可正常访问。因此项目内置了一个极小的 Go 传输代理 `cmd/gqlproxy`（约 200 行，仅标准库）：
+investing.com blocks Node.js requests via Cloudflare **TLS fingerprinting** (HTTP 403), while a Go client can access it normally. That's why the project bundles a tiny Go transport proxy `cmd/gqlproxy` (~200 lines, stdlib only):
 
 ```bash
-npm run build:sidecar   # 生成 bin/gqlproxy
+npm run build:sidecar   # produces bin/gqlproxy
 ```
 
-TS 数据源层默认先试 Node fetch，遇到 403 自动切换到该代理（含持久化 cookie 会话，自动处理 Cloudflare challenge）。从不受指纹拦截的网络访问时无需代理，可设置 `INVESTING_TRANSPORT=node` 强制纯 Node。
+The TS data-source layer tries Node `fetch` first, and automatically switches to that proxy on a 403 (with a persistent cookie session that handles the Cloudflare challenge). From networks that aren't fingerprint-blocked the proxy is unnecessary; set `INVESTING_TRANSPORT=node` to force pure Node.
 
 ```bash
-# 完整构建（TypeScript + Go sidecar）
+# Full build (TypeScript + Go sidecar)
 npm run build:all
 ```
 
-## 环境变量
+## Environment variables
 
-| 变量 | 默认 | 说明 |
+| Var | Default | Description |
 |---|---|---|
-| `DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME` | 127.0.0.1/3306/stock/stock123/stock_mcp | MySQL 连接 |
-| `USER_AGENT` | Chrome 148 UA | 请求指纹 |
-| `REQUEST_DELAY_MS` | 300 | 请求间隔限流 |
-| `PROXY_URL` | 无 | 所有 Node fetch 请求使用的 HTTP(S) 代理，例如 `http://127.0.0.1:17890`；Yahoo 在大陆需配置 |
-| `BARS_START_DATE` | 2000-01-01 | 全量同步起点 |
-| `BARS_PROVIDER` | yahoo | K 线来源（yahoo/investing） |
+| `DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME` | 127.0.0.1/3306/stock/stock123/stock_mcp | MySQL connection |
+| `USER_AGENT` | Chrome 148 UA | Request fingerprint |
+| `REQUEST_DELAY_MS` | 300 | Per-request rate limit |
+| `PROXY_URL` | none | HTTP(S) proxy for all Node fetch requests, e.g. `http://127.0.0.1:17890`; Yahoo needs it from mainland China |
+| `BARS_START_DATE` | 2000-01-01 | Full-sync start date |
+| `BARS_PROVIDER` | yahoo | Bar source (yahoo/investing) |
 | `INVESTING_TRANSPORT` | auto | node / go / auto |
-| `GQLPROXY_COOKIE_FILE` | .cache/gqlproxy_cookies.txt | sidecar cookie 会话文件 |
+| `GQLPROXY_COOKIE_FILE` | .cache/gqlproxy_cookies.txt | sidecar cookie session file |
