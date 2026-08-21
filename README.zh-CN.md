@@ -4,7 +4,7 @@
 
 [English](./README.md) | [中文](./README.zh-CN.md)
 
-MCP server（TypeScript / Node.js）通过 **Yahoo Finance** 和 **Investing.com（GraphQL + TVC）** 获取股票全量信息，持久化到 **外部 MySQL**（通过 `DATABASE_URL` 连接串配置，不随 server 内置），按标的代码查询。
+MCP server（TypeScript / Node.js）通过 **Yahoo Finance** 和 **Investing.com（GraphQL + TVC）** 获取股票全量信息，持久化到 **外部 MySQL**（通过 `YAHOO_STOCK_MCP_DATABASE_URL` 连接串配置，不随 server 内置），按标的代码查询。
 
 架构上 MCP server 保持轻量：它只是一个薄查询层 + 同步触发器，数据库是完全外部的依赖。
 
@@ -23,7 +23,7 @@ npm install -g yahoo-stock-mcp
 ```bash
 
 # 0. 配置外部 MySQL 连接（.env）
-#    DATABASE_URL=mysql://user:pass@host:3306/stock_mcp
+#    YAHOO_STOCK_MCP_DATABASE_URL=mysql://user:pass@host:3306/yahoo_stock_mcp
 #    本地临时开发库可用 deploy/docker-compose.mysql.yml 起一个：
 #    docker compose -f deploy/docker-compose.mysql.yml up -d
 
@@ -131,17 +131,21 @@ npm test           # 两者一起
   "mcpServers": {
     "yahoo-stock-mcp": {
       "command": "yahoo-stock-mcp",
-      "args": ["server"]
+      "args": ["server"],
+      "env": {
+        "YAHOO_STOCK_MCP_DATABASE_URL": "mysql://user:pass@host:3306/yahoo_stock_mcp",
+        "YAHOO_STOCK_MCP_PROXY_URL": "http://127.0.0.1:17890"
+      }
     }
   }
 }
 ```
 
-> `command` 依赖 `yahoo-stock-mcp` 在 PATH 上（npm 全局安装后即满足）；若未全局安装，也可改用源码路径 `node /path/to/yahoo-stock-mcp/dist/cli.js server`。
+> `command` 依赖 `yahoo-stock-mcp` 在 PATH 上（npm 全局安装后即满足）；若未全局安装，也可改用源码路径 `node /path/to/yahoo-stock-mcp/dist/cli.js server`。所有配置变量都带 `YAHOO_STOCK_MCP_` 前缀，避免与其它应用的 `DATABASE_URL` / `PROXY_URL` / `USER_AGENT` 冲突。
 
 ## 说明
 
-- 全量同步：从 `BARS_START_DATE`（默认 2000-01-01）拉全部日 K + 全部基本面 + 期权快照 + 新闻 + 数据清单（事件/内部人/分析师/盈利趋势/空头/基金等）。
+- 全量同步：从 `YAHOO_STOCK_MCP_BARS_START_DATE`（默认 2000-01-01）拉全部日 K + 全部基本面 + 期权快照 + 新闻 + 数据清单（事件/内部人/分析师/盈利趋势/空头/基金等）。
 - 增量同步：按 `sync_state.last_bar_date` 只拉新 K 线，并刷新行情、比率、预测、新闻、期权快照与数据清单。
 - 分钟线：`--intraday <1m|5m|15m|30m|60m>` 拉取最近 7 天分钟 K 到 `intraday_bars`（幂等 upsert）。
 - 板块：`sync --sectors` 一键同步 11 个 GICS 板块 ETF（XLC..XLU）+ SPY 基准的行情与 `topHoldings` 成分股，`get_sector_performance` 输出板块轮动排名。
@@ -157,7 +161,7 @@ investing.com 通过 Cloudflare **TLS 指纹**拦截 Node.js 的请求（HTTP 40
 npm run build:sidecar   # 生成 bin/gqlproxy
 ```
 
-TS 数据源层默认先试 Node fetch，遇到 403 自动切换到该代理（含持久化 cookie 会话，自动处理 Cloudflare challenge）。从不受指纹拦截的网络访问时无需代理，可设置 `INVESTING_TRANSPORT=node` 强制纯 Node。
+TS 数据源层默认先试 Node fetch，遇到 403 自动切换到该代理（含持久化 cookie 会话，自动处理 Cloudflare challenge）。从不受指纹拦截的网络访问时无需代理，可设置 `YAHOO_STOCK_MCP_INVESTING_TRANSPORT=node` 强制纯 Node。
 
 ```bash
 # 完整构建（TypeScript + Go sidecar）
@@ -168,11 +172,13 @@ npm run build:all
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME` | 127.0.0.1/3306/stock/stock123/stock_mcp | MySQL 连接 |
-| `USER_AGENT` | Chrome 148 UA | 请求指纹 |
-| `REQUEST_DELAY_MS` | 300 | 请求间隔限流 |
-| `PROXY_URL` | 无 | 所有 Node fetch 请求使用的 HTTP(S) 代理，例如 `http://127.0.0.1:17890`；Yahoo 在大陆需配置 |
-| `BARS_START_DATE` | 2000-01-01 | 全量同步起点 |
-| `BARS_PROVIDER` | yahoo | K 线来源（yahoo/investing） |
-| `INVESTING_TRANSPORT` | auto | node / go / auto |
-| `GQLPROXY_COOKIE_FILE` | .cache/gqlproxy_cookies.txt | sidecar cookie 会话文件 |
+| `YAHOO_STOCK_MCP_DATABASE_URL` | 由 `DB_*` 推导 | 完整 MySQL 连接串，例如 `mysql://user:pass@host:3306/yahoo_stock_mcp`；优先于 `DB_*` |
+| `YAHOO_STOCK_MCP_DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME` | 127.0.0.1/3306/stock/stock123/yahoo_stock_mcp | MySQL 连接（未设置 `DATABASE_URL` 时使用） |
+| `YAHOO_STOCK_MCP_USER_AGENT` | Chrome 148 UA | 请求指纹 |
+| `YAHOO_STOCK_MCP_REQUEST_DELAY_MS` | 300 | 请求间隔限流 |
+| `YAHOO_STOCK_MCP_PROXY_URL` | 无 | 所有 Node fetch 请求使用的 HTTP(S) 代理，例如 `http://127.0.0.1:17890`；Yahoo 在大陆需配置 |
+| `YAHOO_STOCK_MCP_BARS_START_DATE` | 2000-01-01 | 全量同步起点 |
+| `YAHOO_STOCK_MCP_BARS_PROVIDER` | yahoo | K 线来源（yahoo/investing） |
+| `YAHOO_STOCK_MCP_NEWS_COUNT` | 20 | 每次抓取的新闻条数 |
+| `YAHOO_STOCK_MCP_INVESTING_TRANSPORT` | auto | node / go / auto |
+| `YAHOO_STOCK_MCP_GQLPROXY_COOKIE_FILE` | .cache/gqlproxy_cookies.txt | sidecar cookie 会话文件 |

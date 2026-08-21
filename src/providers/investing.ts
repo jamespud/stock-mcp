@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { config } from "../config.js";
+import { config, env } from "../config.js";
 import { httpFetch, httpText } from "./http.js";
 import type { AnalystForecast, Bar, Dividend, EarningsRecord, FinancialField, Holder, RatioValue } from "./types.js";
 
@@ -11,12 +11,12 @@ const GQL_URL = "https://gql.api.investing.com/graphql";
 const PROJECT_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 
 type Transport = "auto" | "node" | "go";
-let transport: Transport = (process.env.INVESTING_TRANSPORT as Transport) ?? "auto";
+let transport: Transport = (env("INVESTING_TRANSPORT") as Transport) ?? "auto";
 let sidecarPath: string | null = null;
 
 function findSidecar(): string | null {
   const candidates = [
-    process.env.GQLPROXY_PATH,
+    env("GQLPROXY_PATH"),
     resolve(PROJECT_ROOT, "bin", "gqlproxy"),
     resolve(process.cwd(), "bin", "gqlproxy"),
   ];
@@ -41,7 +41,7 @@ async function sidecarRequest(
   }
   const fullHeaders = { "user-agent": config.userAgent, ...headers };
   const payload = JSON.stringify({ method, headers: fullHeaders, body: body ?? "" });
-  const cookieFile = process.env.GQLPROXY_COOKIE_FILE ?? resolve(PROJECT_ROOT, ".cache", "gqlproxy_cookies.txt");
+  const cookieFile = env("GQLPROXY_COOKIE_FILE") ?? resolve(PROJECT_ROOT, ".cache", "gqlproxy_cookies.txt");
   let attempt = 0;
   for (;;) {
     const { status, text } = await sidecarOnce(payload, url, cookieFile);

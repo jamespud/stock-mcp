@@ -4,7 +4,7 @@
 
 [English](./README.md) | [中文](./README.zh-CN.md)
 
-An MCP server (TypeScript / Node.js) that pulls comprehensive market data for stocks via **Yahoo Finance** and **Investing.com (GraphQL + TVC)**, persists it to an **external MySQL** (configured via a `DATABASE_URL` connection string, not bundled with the server), and queries it by ticker.
+An MCP server (TypeScript / Node.js) that pulls comprehensive market data for stocks via **Yahoo Finance** and **Investing.com (GraphQL + TVC)**, persists it to an **external MySQL** (configured via a `YAHOO_STOCK_MCP_DATABASE_URL` connection string, not bundled with the server), and queries it by ticker.
 
 Architecturally the MCP server stays lightweight: it is only a thin query layer plus a sync trigger, while the database is a fully external dependency.
 
@@ -23,7 +23,7 @@ The package already ships the compiled `dist/` and the Go sidecar `bin/gqlproxy`
 ```bash
 
 # 0. Configure the external MySQL connection (.env)
-#    DATABASE_URL=mysql://user:pass@host:3306/stock_mcp
+#    YAHOO_STOCK_MCP_DATABASE_URL=mysql://user:pass@host:3306/yahoo_stock_mcp
 #    For a local dev database you can spin one up with deploy/docker-compose.mysql.yml:
 #    docker compose -f deploy/docker-compose.mysql.yml up -d
 
@@ -131,17 +131,21 @@ For the "watch the market, position early" use case, the following dimensions ar
   "mcpServers": {
     "yahoo-stock-mcp": {
       "command": "yahoo-stock-mcp",
-      "args": ["server"]
+      "args": ["server"],
+      "env": {
+        "YAHOO_STOCK_MCP_DATABASE_URL": "mysql://user:pass@host:3306/yahoo_stock_mcp",
+        "YAHOO_STOCK_MCP_PROXY_URL": "http://127.0.0.1:17890"
+      }
     }
   }
 }
 ```
 
-> `command` relies on `yahoo-stock-mcp` being on PATH (satisfied after a global npm install); if not globally installed, use the source path instead: `node /path/to/yahoo-stock-mcp/dist/cli.js server`.
+> `command` relies on `yahoo-stock-mcp` being on PATH (satisfied after a global npm install); if not globally installed, use the source path instead: `node /path/to/yahoo-stock-mcp/dist/cli.js server`. All config vars use the `YAHOO_STOCK_MCP_` prefix so they never collide with other apps' `DATABASE_URL` / `PROXY_URL` / `USER_AGENT`.
 
 ## Notes
 
-- Full sync: pulls all daily bars from `BARS_START_DATE` (default `2000-01-01`) + all fundamentals + an options snapshot + news + the data checklist (events/insiders/analysts/earnings trend/short interest/funds, etc.).
+- Full sync: pulls all daily bars from `YAHOO_STOCK_MCP_BARS_START_DATE` (default `2000-01-01`) + all fundamentals + an options snapshot + news + the data checklist (events/insiders/analysts/earnings trend/short interest/funds, etc.).
 - Incremental sync: only pulls new bars since `sync_state.last_bar_date`, and refreshes quotes, ratios, estimates, news, the options snapshot and the data checklist.
 - Minute bars: `--intraday <1m|5m|15m|30m|60m>` pulls the last 7 days of minute bars into `intraday_bars` (idempotent upsert).
 - Sectors: `sync --sectors` syncs the 11 GICS sector ETFs (XLC..XLU) + SPY benchmark quotes and `topHoldings` constituents in one go; `get_sector_performance` returns the rotation ranking.
@@ -157,7 +161,7 @@ investing.com blocks Node.js requests via Cloudflare **TLS fingerprinting** (HTT
 npm run build:sidecar   # produces bin/gqlproxy
 ```
 
-The TS data-source layer tries Node `fetch` first, and automatically switches to that proxy on a 403 (with a persistent cookie session that handles the Cloudflare challenge). From networks that aren't fingerprint-blocked the proxy is unnecessary; set `INVESTING_TRANSPORT=node` to force pure Node.
+The TS data-source layer tries Node `fetch` first, and automatically switches to that proxy on a 403 (with a persistent cookie session that handles the Cloudflare challenge). From networks that aren't fingerprint-blocked the proxy is unnecessary; set `YAHOO_STOCK_MCP_INVESTING_TRANSPORT=node` to force pure Node.
 
 ```bash
 # Full build (TypeScript + Go sidecar)
@@ -168,11 +172,13 @@ npm run build:all
 
 | Var | Default | Description |
 |---|---|---|
-| `DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME` | 127.0.0.1/3306/stock/stock123/stock_mcp | MySQL connection |
-| `USER_AGENT` | Chrome 148 UA | Request fingerprint |
-| `REQUEST_DELAY_MS` | 300 | Per-request rate limit |
-| `PROXY_URL` | none | HTTP(S) proxy for all Node fetch requests, e.g. `http://127.0.0.1:17890`; Yahoo needs it from mainland China |
-| `BARS_START_DATE` | 2000-01-01 | Full-sync start date |
-| `BARS_PROVIDER` | yahoo | Bar source (yahoo/investing) |
-| `INVESTING_TRANSPORT` | auto | node / go / auto |
-| `GQLPROXY_COOKIE_FILE` | .cache/gqlproxy_cookies.txt | sidecar cookie session file |
+| `YAHOO_STOCK_MCP_DATABASE_URL` | derived from `DB_*` | Full MySQL connection string, e.g. `mysql://user:pass@host:3306/yahoo_stock_mcp`; takes precedence over `DB_*` |
+| `YAHOO_STOCK_MCP_DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME` | 127.0.0.1/3306/stock/stock123/yahoo_stock_mcp | MySQL connection (used when `DATABASE_URL` is not set) |
+| `YAHOO_STOCK_MCP_USER_AGENT` | Chrome 148 UA | Request fingerprint |
+| `YAHOO_STOCK_MCP_REQUEST_DELAY_MS` | 300 | Per-request rate limit |
+| `YAHOO_STOCK_MCP_PROXY_URL` | none | HTTP(S) proxy for all Node fetch requests, e.g. `http://127.0.0.1:17890`; Yahoo needs it from mainland China |
+| `YAHOO_STOCK_MCP_BARS_START_DATE` | 2000-01-01 | Full-sync start date |
+| `YAHOO_STOCK_MCP_BARS_PROVIDER` | yahoo | Bar source (yahoo/investing) |
+| `YAHOO_STOCK_MCP_NEWS_COUNT` | 20 | News count per fetch |
+| `YAHOO_STOCK_MCP_INVESTING_TRANSPORT` | auto | node / go / auto |
+| `YAHOO_STOCK_MCP_GQLPROXY_COOKIE_FILE` | .cache/gqlproxy_cookies.txt | sidecar cookie session file |

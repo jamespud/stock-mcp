@@ -35,7 +35,13 @@ export async function query<T = any>(sql: string, params: any[] = []): Promise<T
 
 export async function initSchema(): Promise<void> {
   const schemaPath = resolve(PACKAGE_ROOT, "db", "schema.sql");
-  const sql = readFileSync(schemaPath, "utf8");
+  // db/schema.sql hardcodes the canonical database name (yahoo_stock_mcp) so it
+  // also works verbatim as the docker entrypoint init script. At runtime we
+  // substitute the configured DB name so users can point at their own database.
+  const sql = readFileSync(schemaPath, "utf8").replace(
+    /\byahoo_stock_mcp\b/g,
+    () => config.db.database
+  );
   const conn = await getPool().getConnection();
   try {
     await conn.query(sql);

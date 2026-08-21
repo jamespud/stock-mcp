@@ -6,13 +6,13 @@ services:
     container_name: yahoo-stock-mcp-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: stock_mcp
+      MYSQL_DATABASE: yahoo_stock_mcp
       MYSQL_USER: stock
       MYSQL_PASSWORD: stock123
     ports:
       - "3306:3306"
     volumes:
-      - stock_mcp_data:/var/lib/mysql
+      - yahoo_stock_mcp_data:/var/lib/mysql
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
@@ -22,4 +22,4 @@ services:
       retries: 20
 
 volumes:
-  stock_mcp_data:
+  yahoo_stock_mcp_data:

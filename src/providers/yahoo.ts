@@ -1,4 +1,5 @@
 import { httpFetch, httpJson, httpText, HttpError } from "./http.js";
+import { config } from "../config.js";
 import type { AnalystAction, Bar, CompanyEvent, Dividend, EarningsTrendRow, FinancialField, FundHolder, HolderBreakdown, InsiderTransaction, IntradayBar, NewsItem, OptionChain, OptionQuote, RatioValue, RecommendationTrendRow, ShortInterest } from "./types.js";
 
 const CHART_HOST = "https://query1.finance.yahoo.com";
@@ -14,7 +15,7 @@ interface CrumbCache {
 let crumbCache: CrumbCache | null = null;
 
 async function refreshCrumb(): Promise<CrumbCache> {
-  const cookieRes = await httpFetch(COOKIE_URL, { headers: { "user-agent": process.env.USER_AGENT ?? "" } });
+  const cookieRes = await httpFetch(COOKIE_URL, { headers: { "user-agent": config.userAgent } });
   await cookieRes.text();
   if (cookieRes.status >= 500) throw new Error(`yahoo cookie HTTP ${cookieRes.status}`);
   const cookie = cookieRes.headers

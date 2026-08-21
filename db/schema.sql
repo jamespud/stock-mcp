@@ -1,6 +1,6 @@
--- stock_mcp schema (MySQL 8)
-CREATE DATABASE IF NOT EXISTS stock_mcp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE stock_mcp;
+-- yahoo_stock_mcp schema (MySQL 8)
+CREATE DATABASE IF NOT EXISTS yahoo_stock_mcp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE yahoo_stock_mcp;
 
 CREATE TABLE IF NOT EXISTS instruments (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
