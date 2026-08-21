@@ -42,7 +42,25 @@ export async function initSchema(): Promise<void> {
     /\byahoo_stock_mcp\b/g,
     () => config.db.database
   );
-  const conn = await getPool().getConnection();
+  let conn;
+  try {
+    conn = await getPool().getConnection();
+  } catch (err: any) {
+    // mysql2 signals a provisioning problem when the configured database is
+    // missing (ER_BAD_DB_ERROR, errno 1049) or inaccessible to the user
+    // (ER_DBACCESS_DENIED_ERROR, errno 1044). Give an actionable hint instead of
+    // the raw driver error.
+    if (err?.errno === 1049 || err?.errno === 1044) {
+      throw new Error(
+        `Database "${config.db.database}" is missing or not accessible to user "${config.db.user}". ` +
+          `Create it first, e.g. "docker compose -f deploy/docker-compose.mysql.yml up -d" or as an admin: ` +
+          `CREATE DATABASE \`${config.db.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; ` +
+          `Then ensure the configured user has privileges on it, or point ` +
+          `YAHOO_STOCK_MCP_DATABASE_URL at an existing database.`
+      );
+    }
+    throw err;
+  }
   try {
     await conn.query(sql);
     console.log("schema applied");
