@@ -1,14 +1,24 @@
 # yahoo-stock-mcp
 
+[![npm version](https://img.shields.io/npm/v/yahoo-stock-mcp.svg)](https://www.npmjs.com/package/yahoo-stock-mcp)
+
 MCP server（TypeScript / Node.js）通过 **Yahoo Finance** 和 **Investing.com（GraphQL + TVC）** 获取股票全量信息，持久化到 **外部 MySQL**（通过 `DATABASE_URL` 连接串配置，不随 server 内置），按标的代码查询。
 
 架构上 MCP server 保持轻量：它只是一个薄查询层 + 同步触发器，数据库是完全外部的依赖。
 
-## 快速开始
+## 安装
 
 ```bash
-npm install
-npm run build:all   # TypeScript + Go sidecar
+npm install -g yahoo-stock-mcp
+```
+
+需要 Node.js >= 20 与一个外部 MySQL（见下方 `.env` 配置）。
+
+## 快速开始（npm 全局安装）
+
+包内已自带编译好的 `dist/` 与 Go sidecar `bin/gqlproxy`，无需再构建，直接用 `yahoo-stock-mcp` 命令：
+
+```bash
 
 # 0. 配置外部 MySQL 连接（.env）
 #    DATABASE_URL=mysql://user:pass@host:3306/stock_mcp
@@ -16,25 +26,33 @@ npm run build:all   # TypeScript + Go sidecar
 #    docker compose -f deploy/docker-compose.mysql.yml up -d
 
 # 1. 对配置的数据库初始化表结构
-npm run db:init
+yahoo-stock-mcp db:init
 
 # 2. 全量同步一只股票（从 2000-01-01 开始拉历史 + 全部基本面）
-npm run sync -- --symbol NVDA --full
+yahoo-stock-mcp sync --symbol NVDA --full
 
 # 之后增量同步（只拉新增数据）
-npm run sync -- --symbol NVDA
+yahoo-stock-mcp sync --symbol NVDA
 
 # 增量同步并同时拉取 15 分钟线（1m/5m/15m/30m/60m）
-npm run sync -- --symbol NVDA --intraday 15m
+yahoo-stock-mcp sync --symbol NVDA --intraday 15m
 
 # 同步所有已入库标的
-npm run sync -- --all --full
+yahoo-stock-mcp sync --all --full
 
 # 同步全部 GICS 板块 ETF 行情 + 成分股（板块轮动数据）
-npm run sync -- --sectors
+yahoo-stock-mcp sync --sectors
 
 # 3. 启动 MCP server（stdio）
-npm run server
+yahoo-stock-mcp server
+```
+
+## 从源码运行（开发 / 贡献）
+
+```bash
+npm install
+npm run build:all   # TypeScript + Go sidecar
+npm run server      # stdio；其余命令用 npm run sync -- ... 或 npm run dev
 ```
 
 ## 测试
@@ -110,12 +128,14 @@ npm test           # 两者一起
 {
   "mcpServers": {
     "yahoo-stock-mcp": {
-      "command": "node",
-      "args": ["/path/to/yahoo-stock-mcp/dist/cli.js", "server"]
+      "command": "yahoo-stock-mcp",
+      "args": ["server"]
     }
   }
 }
 ```
+
+> `command` 依赖 `yahoo-stock-mcp` 在 PATH 上（npm 全局安装后即满足）；若未全局安装，也可改用源码路径 `node /path/to/yahoo-stock-mcp/dist/cli.js server`。
 
 ## 说明
 
